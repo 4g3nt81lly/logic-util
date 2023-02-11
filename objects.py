@@ -15,6 +15,7 @@ class Proposition:
     atomic_structs: list
     truth_table: Dict[str, list] = {}
 
+    labels: list[str] | None = None
     reverse_values: bool
 
     # truth values of the proposition
@@ -25,21 +26,35 @@ class Proposition:
     def row(self) -> Dict[str, list[str]]:
         return {standardize_notations(self.source, display=True): self.values()}
 
-    def __init__(self, statement: str, reverse: bool = False):
+    def __init__(self, statement: str,
+                 labels: str | None = None,
+                 reverse: bool = False):
         self.statement = statement
         self.reverse_values = reverse
+        if labels:
+            if len(labels) != 2:
+                print(CUSTOM_LABEL_EXCEED_LENGTH)
+                exit()
+            if labels[0] == labels[1]:
+                print(CUSTOM_LABEL_IDENTICAL)
+                exit()
+            self.labels = [char for char in labels]
+
         # parse and get structure (nested list)
         try:
             parsed_struct = parsed(statement)
-        except SyntaxError:
-            print(UNMATCHED_PARENTHESES)
-            exit()
         except AssertionError as err:
             print(err)
             exit()
+        except SyntaxError:
+            print('Expression:', f"'{statement}'")
+            print(UNMATCHED_PARENTHESES)
+            exit()
         except Exception as err:
+            print('Expression:', f"'{statement}'")
             print(UNEXPECTED_ERROR, err)
             exit()
+
         if parsed_struct == []:
             print(NULL_STATEMENT)
             exit()
@@ -55,9 +70,9 @@ class Proposition:
         # make all cases
         # default order: F (top) -> T (bottom)
         cases = list(product([0, 1], repeat=len(variables)))
-        self.cases = cases
         if reverse:
-            self.cases = cases[::-1]
+            cases = cases[::-1]
+        self.cases = cases
         # make table with variable columns
         self.truth_table = OrderedDict({var: [] for var in variables})
         for index, var in enumerate(variables):
@@ -118,10 +133,14 @@ class Proposition:
             table_data[MARK_COLUMN] = []
             for row in range(row_no):
                 values = [table_data[col][row] for col in headers]
-                table_data[MARK_COLUMN].append(
-                    CHECK_MARK if check_handler(values) else CROSS_MARK)
+                # add check/cross mark using the given predicate
+                mark = red(CROSS_MARK)
+                if check_handler(values):
+                    mark = green(CHECK_MARK)
+                mark = f" {bold(mark)} "
+                table_data[MARK_COLUMN].append(mark)
 
-        output_table(table_data, filename=filename)
+        output_table(table_data, labels=self.labels, filename=filename)
 
 
 class Argument:
@@ -131,6 +150,7 @@ class Argument:
     cases: list
     truth_table: Dict[str, list]
 
+    labels: list[str] | None = None
     reverse_values: bool
 
     # get all sentences: premises + conclusion
@@ -141,11 +161,20 @@ class Argument:
         return sentences
 
     def __init__(self, premises: list[str], conclusion: str | None = None,
+                 labels: str | None = None,
                  reverse: bool = False):
         self.premises = [Proposition(premise) for premise in premises]
         if conclusion:
             self.conclusion = Proposition(conclusion)
         self.reverse_values = reverse
+        if labels:
+            if len(labels) != 2:
+                print(CUSTOM_LABEL_EXCEED_LENGTH)
+                exit()
+            if labels[0] == labels[1]:
+                print(CUSTOM_LABEL_IDENTICAL)
+                exit()
+            self.labels = [char for char in labels]
 
         # collect all variables
         variables = self.premises[0].variables[:]  # make a copy
@@ -210,10 +239,13 @@ class Argument:
                 # get values of each column in the row
                 values = [table_data[col][row] for col in headers]
                 # add check/cross mark using the given predicate
-                table_data[MARK_COLUMN].append(
-                    CHECK_MARK if check_handler(values) else CROSS_MARK)
+                mark = red(CROSS_MARK)
+                if check_handler(values):
+                    mark = green(CHECK_MARK)
+                mark = f" {bold(mark)} "
+                table_data[MARK_COLUMN].append(mark)
 
-        output_table(table_data, filename=filename)
+        output_table(table_data, labels=self.labels, filename=filename)
 
     def all_equivalent(self, verbose: bool = False) -> bool:
         # test cases:
@@ -235,7 +267,8 @@ class Argument:
                 prefix = bold(yellow(f"Test {index + 1}:"))
                 print(prefix, display_expr)
 
-            statement = Proposition(statement)
+            statement = Proposition(statement,
+                                    labels=self.labels)
 
             if verbose:
                 statement.output(no_atoms=True)

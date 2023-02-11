@@ -17,7 +17,7 @@ IFF_OP = ' iff '
 
 
 # check/cross mark
-MARK_COLUMN = ' '
+MARK_COLUMN = 'CHECK/CROSS'
 CHECK_MARK = '\u2713'
 CROSS_MARK = '\u2717'
 
@@ -49,6 +49,8 @@ IFF_SYMBOL = ' \u2194 '
 UNEXPECTED_ERROR = 'An unexpected error occurred:'
 NULL_STATEMENT = 'Error: Null statement.'
 UNMATCHED_PARENTHESES = 'Syntax error: Unmatched parentheses.'
+CUSTOM_LABEL_EXCEED_LENGTH = 'Custom label string must be of length 2.'
+CUSTOM_LABEL_IDENTICAL = 'Custom labels must be different.'
 NAME_HELP = '''Rules:
 1. Contains only alpha-numeric characters and underscores.
 2. Must not start with a number.

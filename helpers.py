@@ -395,7 +395,9 @@ def compile(s: list):
 # naive function that output a table via either stdout or csv
 
 
-def output_table(data: Dict[str, list], filename: str | None = None):
+def output_table(data: Dict[str, list],
+                 labels: list[str] | None = None,
+                 filename: str | None = None):
     headers = list(data.keys())
     # ASSERT: same number of rows in data
     row_no = len(data[headers[0]])
@@ -404,58 +406,77 @@ def output_table(data: Dict[str, list], filename: str | None = None):
         # write to csv file
         with open(filename, 'w') as csv_file:
             writer = csv.writer(csv_file)
-            # write header (variables + sentences, display style)
+            # write header without check/cross column
+            headers = list(filter(lambda h: h != MARK_COLUMN, headers))
             writer.writerow(headers)
             # write body
             for row in range(row_no):
                 # truth_table: COMPILED sentences as keys
                 values = [data[col][row] for col in headers]
+                if labels:
+                    # use custom labels
+                    true, false = labels
+                    values = list(
+                        map(lambda v: true if v == 1 else false, values))
                 writer.writerow(values)
     else:
         # print table
-        # make header
-        top_border = '\u252f'.join(
-            ['\u2501' * (len(col) + 2) for col in headers]
-        )
-        top_border = f"\u250f{top_border}\u2513"
+        # make header and template for rows
+        top_border = []
+        row_template = []
+        row_separator = []
+        bottom_border = []
 
-        # make rows
-        row_template = '\u2502'.join(
-            ['{:^' + str(len(col) + 2) + '}' for col in headers]
-        )
+        for column in headers:
+            size = len(column) + 2
+            if column == MARK_COLUMN:
+                size = 3
+            # make top border
+            top_border.append('\u2501' * size)
+            # make row template
+            row_template.append('{:^' + str(size) + '}')
+            # make row separator
+            row_separator.append('\u2500' * size)
+            # make footer
+            bottom_border.append('\u2501' * size)
+
+        top_border = '\u252f'.join(top_border)
+        row_template = '\u2502'.join(row_template)
+        row_separator = '\u253c'.join(row_separator)
+        bottom_border = '\u2537'.join(bottom_border)
+
+        top_border = f"\u250f{top_border}\u2513"
         row_template = f"\u2503{row_template}\u2503"
+        row_separator = f"\n\u2520{row_separator}\u2528\n"
+        bottom_border = f"\u2517{bottom_border}\u251b"
 
         # initialize rows with header
-        rows = [row_template.format(*headers)]
+        # hide CHECK/CROSS key
+        display_headers = []
+        for header in headers:
+            if header == MARK_COLUMN:
+                display_headers.append(' ')
+            else:
+                display_headers.append(header)
+
+        rows: list[str] = [row_template.format(*display_headers)]
         for row in range(row_no):
             values = [data[col][row] for col in headers]
-            rows.append(row_template.format(*values))
-        
-        # make row separator
-        row_separator = '\u253c'.join(
-            ['\u2500' * (len(col) + 2) for col in headers]
-        )
-        row_separator = f"\n\u2520{row_separator}\u2528\n"
+            if labels:
+                # use custom labels
+                true, false = labels
 
-        # make footer
-        bottom_border = '\u2537'.join(
-            ['\u2501' * (len(col) + 2) for col in headers]
-        )
-        bottom_border = f"\u2517{bottom_border}\u251b"
+                # substitution handler
+                def substitute(value: str) -> str:
+                    return true if value == 1 else (false if value == 0 else value)
+                
+                values = list(map(substitute, values))
+            rows.append(row_template.format(*values))
 
         # print table
         print(top_border)
         print(row_separator.join(rows))
         print(bottom_border)
-
-        # for row in range(row_no):
-        #     values = [data[col][row] for col in headers]
-        #     if MARK_COLUMN in headers:
-        #         if data[MARK_COLUMN][row] == CHECK_MARK:
-        #             print('\033[0m\033[32m', end='')
-        #         else:
-        #             print('\033[0m\033[91m', end='')
-        #     print(row_template.format(*values) + '\033[0m')
 
 
 # -----* DEPRECATED *-----
