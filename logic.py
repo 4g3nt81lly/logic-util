@@ -40,15 +40,22 @@ check_equivalence_parser.add_argument('-v', '--verbose', action='store_true', de
                                       help='Verbose Mode: Print the truth table and a detailed conclusion.')
 check_equivalence_parser.add_argument('-o', '--output', type=str, action='store',
                                       metavar=('FILE-PATH'),
-                                      help='The file name to be saved. This flag is ignored when verbose mode is on.')
+                                      help='The file name to be saved. \
+                                        This flag is ignored when verbose mode is on.')
 
 check_validity_parser = subparsers.add_parser('check-validity',
                                               help='Check if an argument is valid.')
 check_validity_parser.add_argument('arg_premises', nargs='+', type=str, action='store',
                                    metavar=('PREMISE'),
                                    help='A set of premises.')
-check_validity_parser.add_argument('-c', '--conclusion', type=str, action='store',
+check_validity_parser.add_argument('-c', '--conclusion', type=str, action='store', default=None,
                                    help='The conclusion of the argument.')
+check_validity_parser.add_argument('-l', '--labels', type=str, action='store', default=None,
+                                   metavar=('[TRUE][FALSE]'),
+                                   help='Custom labels for truth values.')
+check_validity_parser.add_argument('-o', '--output', type=str, action='store',
+                                   metavar=('FILE-PATH'),
+                                   help='The file name to be saved.')
 
 # get arguments
 args = parser.parse_args()
@@ -63,55 +70,67 @@ if 'table_statement' in opts.keys():
                             labels=args.labels,
                             reverse=args.reverse_values)
 
-    if args.output:
-        # output specified
-        filename = args.output.strip()
-        statement.output(filename=filename, no_atoms=args.no_atoms)
-    else:
-        # print table
-        statement.output(no_atoms=args.no_atoms)
+    # get output file name
+    filename = args.output.strip() if args.output else None
+    statement.output(filename=filename, no_atoms=args.no_atoms)
 
 elif 'equivalent_statements' in opts.keys():
     # check equivalence
+    # strip all statements
     statements = [s.strip() for s in args.equivalent_statements]
+    # standardize notations for all statements
     statements = [standardize_notations(f"({s})") for s in statements]
 
+    # parse and compile all statements
     statements = Argument(statements,
                           labels=args.labels)
 
     # get output file name
-    filename = None
-    if args.output:
-        filename = args.output.strip()
+    filename = args.output.strip() if args.output else None
 
     if not args.verbose:
         # normal: print a combined table with checkmarks
-        def check(s: list[str]) -> bool:
-            # avoid checking variable columns
-            variables_count = len(statements.variables)
-            sentences = s[variables_count:]
-            # it would be of length 1 if all same
-            return len(set(sentences)) == 1
-
-        statements.output(check_handler=check, filename=filename)
+        statements.output(check_handler=statements.CHECK_EQUIVALENT,
+                          filename=filename)
 
     # print conclusion
     if statements.all_equivalent(verbose=args.verbose):
         # equivalent
         print(
-            bold(
-                green(f"{CHECK_MARK} The statements are logically equivalent!")
-            )
+            bold(green(CHECK_MARK,
+                       'The statements are logically equivalent!'))
         )
     else:
         # not equivalent
         print(
-            bold(
-                red(f"{CROSS_MARK} The statements are not logically equivalent!")
-            )
+            bold(red(CROSS_MARK,
+                     'The statements are not logically equivalent!'))
         )
 
 elif 'arg_premises' in opts.keys():
-    print('check validity')
+    # check validity
+    # strip all statements
+    statements = [s.strip() for s in args.arg_premises]
+    # standardize notations for all statements
+    statements = [standardize_notations(f"({s})") for s in statements]
+
+    # parse and compile all statements
+    statements = Argument(statements, conclusion=args.conclusion,
+                          labels=args.labels)
+
+    # get output file name
+    filename = args.output.strip() if args.output else None
+
+    statements.output(check_handler=statements.X_COUNTEREXAMPLE,
+                      filename=filename)
+
+    # print conclusion
+    if statements.is_valid():
+        # valid
+        print(bold(green(CHECK_MARK, 'The argument is valid!')))
+    else:
+        # invalid
+        print(bold(red(CROSS_MARK, 'The argument is invalid!')))
+
 else:
     parser.print_help()

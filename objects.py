@@ -105,7 +105,7 @@ class Proposition:
         return all(self.values())
 
     # preprocess and output
-    def output(self, check_handler: Callable[[list], bool] | None = None,
+    def output(self, check_handler: Callable[[list[str]], bool] | None = None,
                no_atoms: bool = False,
                filename: str | None = None):
 
@@ -127,11 +127,9 @@ class Proposition:
         if check_handler:
             # go through each row and add a column of check/cross mark
             headers = list(table_data.keys())
-            # ASSERT all columns have the same number of rows
-            row_no = len(table_data[headers[0]])
             # create a mark column
             table_data[MARK_COLUMN] = []
-            for row in range(row_no):
+            for row in range(len(self.cases)):
                 values = [table_data[col][row] for col in headers]
                 # add check/cross mark using the given predicate
                 mark = red(CROSS_MARK)
@@ -153,10 +151,20 @@ class Argument:
     labels: list[str] | None = None
     reverse_values: bool
 
+    # get all premises (source)
+    def all_premises(self) -> list[str]:
+        return [p.source for p in self.premises]
+
+    # get all Proposition objects
+    def all_propositions(self) -> list[Proposition]:
+        return self.premises + ([self.conclusion] if self.conclusion else [])
+
     # get all sentences: premises + conclusion
-    def all_sentences(self) -> list[str]:
-        sentences = [p.source for p in self.premises]
-        if self.conclusion:
+    def all_sentences(self, variables: bool = False, conclusion: bool = True) -> list[str]:
+        sentences = self.all_premises()
+        if variables:
+            sentences = self.variables + sentences
+        if conclusion and self.conclusion:
             sentences.append(self.conclusion.source)
         return sentences
 
@@ -178,8 +186,10 @@ class Argument:
 
         # collect all variables
         variables = self.premises[0].variables[:]  # make a copy
-        for premise in self.premises:
-            for variable in premise.variables:
+        # loop through all Proposition objects
+        # and NOT the compiled strings
+        for sentence in self.all_propositions():
+            for variable in sentence.variables:
                 if variable not in variables:
                     variables.append(variable)
         self.variables = variables
@@ -195,12 +205,13 @@ class Argument:
         for index, var in enumerate(variables):
             for case in cases:
                 self.truth_table[var].append(case[index])
+
         # get all sentences
-        all_sentences = self.all_sentences()
+        sentences = self.all_sentences()
         # fill in sentences columns
-        self.truth_table.update({s: [] for s in all_sentences})
+        self.truth_table.update({s: [] for s in sentences})
         # for each sentence
-        for sentence in all_sentences:
+        for sentence in sentences:
             # for each case (row)
             for case in cases:
                 namespace = {var: case[index]
@@ -211,18 +222,15 @@ class Argument:
                 self.truth_table[sentence].append(result)
 
     # preprocess and output
-    def output(self, check_handler: Callable[[str], bool] | None = None,
+    def output(self, check_handler: Callable[[list[str]], bool] | None = None,
                filename: str | None = None):
         # all COMPILED sentences
-        all_sentences = [p.source for p in self.premises]
-        all_sentences = self.variables + all_sentences
-        if self.conclusion:
-            all_sentences.append(self.conclusion)
+        sentences = self.all_sentences(variables=True)
 
         table_data = OrderedDict()
 
         for col, values in self.truth_table.items():
-            if col in all_sentences:
+            if col in sentences:
                 display_sentence = standardize_notations(col, display=True)
                 table_data[display_sentence] = values
 
@@ -230,12 +238,10 @@ class Argument:
             # go through each row and add a column of check/cross mark
             # get headers
             headers = list(table_data.keys())
-            # ASSERT: all columns have the same number of rows
-            row_no = len(table_data[headers[0]])
             # add a check/cross column
             table_data[MARK_COLUMN] = []
             # for each row
-            for row in range(row_no):
+            for row in range(len(self.cases)):
                 # get values of each column in the row
                 values = [table_data[col][row] for col in headers]
                 # add check/cross mark using the given predicate
@@ -246,6 +252,33 @@ class Argument:
                 table_data[MARK_COLUMN].append(mark)
 
         output_table(table_data, labels=self.labels, filename=filename)
+
+    # whether the argument is valid
+
+    def is_valid(self) -> bool:
+        sentences = self.all_sentences(variables=True)
+        premises = self.all_premises()
+        # for each premise
+        for row in range(len(self.cases)):
+            consistent = True
+            for sentence in sentences:
+                # if it is a premise
+                if sentence in premises:
+                    # if any premise is false, skip the rest
+                    if not self.truth_table[sentence][row]:
+                        consistent = False
+                        # break  # actually, don't skip just yet
+                        # have to keep going until we find the conclusion
+                if sentence == self.conclusion.source:
+                    conclusion = self.truth_table[sentence][row]
+            # look at conclusion only if the premises are consistent
+            if consistent and not conclusion:
+                # a counterexample is found when conclusion is false
+                return False
+
+        return True
+
+    # whether the set of propositions are all equivalent
 
     def all_equivalent(self, verbose: bool = False) -> bool:
         # test cases:
@@ -277,3 +310,42 @@ class Argument:
                 return False
 
         return True
+
+    # predicate: check if all sentences are equivalent
+
+    def CHECK_EQUIVALENT(self, values: list[str]) -> bool:
+        # get the headers from the truth table
+        # this would correspond to the row values
+        headers = list(self.truth_table.keys())
+        # get all sentences (of concern)
+        sentences = self.all_sentences()
+        sentence_values = []
+        for sentence in sentences:
+            # get index of sentence
+            sentence_index = headers.index(sentence)
+            sentence_values.append(values[sentence_index])
+        # it would be of length 1 if all same
+        return len(set(sentence_values)) == 1
+
+    # predicate: check counterexamples (x-mark)
+
+    def X_COUNTEREXAMPLE(self, values: list[str]) -> bool:
+        # get the headers from the truth table
+        # this would correspond to the row values
+        headers = list(self.truth_table.keys())
+        # get index of conclusion
+        # it is NOT safe to assume that
+        # the conclusion is always the last column
+        conclusion_index = headers.index(self.conclusion.source)
+        conclusion = values[conclusion_index]
+        # get all premises
+        premises = self.all_premises()
+        premise_values = []
+        for premise in premises:
+            # get index of premise
+            premise_index = headers.index(premise)
+            premise_values.append(values[premise_index])
+
+        consistent_premises = all(premise_values)
+        # check only when premises -> conclusion is true
+        return not consistent_premises or conclusion

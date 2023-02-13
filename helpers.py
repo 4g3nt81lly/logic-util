@@ -5,20 +5,24 @@ from typing import Dict
 from constants import *
 
 
-def bold(msg: str) -> str:
-    return f"\033[1m{msg}\033[0m"
+def bold(*msg) -> str:
+    _msg = ' '.join(msg)
+    return f"\033[1m{_msg}\033[0m"
 
 
-def green(msg: str) -> str:
-    return f"\033[32m{msg}\033[0m"
+def green(*msg) -> str:
+    _msg = ' '.join(msg)
+    return f"\033[32m{_msg}\033[0m"
 
 
-def yellow(msg: str) -> str:
-    return f"\033[33m{msg}\033[0m"
+def yellow(*msg) -> str:
+    _msg = ' '.join(msg)
+    return f"\033[33m{_msg}\033[0m"
 
 
-def red(msg: str) -> str:
-    return f"\033[91m{msg}\033[0m"
+def red(*msg) -> str:
+    _msg = ' '.join(msg)
+    return f"\033[91m{_msg}\033[0m"
 
 
 # toggle between compilable and display symbols

@@ -9,3 +9,6 @@
 **/.vscode
 **/.vscode/**
 .vscode/*
+
+# test file
+test.py
