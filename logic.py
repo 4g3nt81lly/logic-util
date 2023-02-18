@@ -16,14 +16,18 @@ make_table_parser.add_argument('table_statement',
                                type=str, action='store',
                                metavar=('STATEMENT'),
                                help='A propositional statement.')
-make_table_parser.add_argument('-l', '--labels', type=str, action='store', default=None,
+make_table_parser.add_argument('-l', '--labels',
+                               type=str, action='store', default=None,
                                metavar=('[TRUE][FALSE]'),
                                help='Custom labels for truth values.')
-make_table_parser.add_argument('-n', '--no-atoms', action='store_true', default=False,
+make_table_parser.add_argument('-n', '--no-atoms',
+                               action='store_true', default=False,
                                help='Do not include atomic sentences in the table.')
-make_table_parser.add_argument('-r', '--reverse-values', action='store_true', default=False,
+make_table_parser.add_argument('-r', '--reverse-values',
+                               action='store_true', default=False,
                                help='Reverse the order of the truth values in the table.')
-make_table_parser.add_argument('-o', '--output', type=str, action='store',
+make_table_parser.add_argument('-o', '--output',
+                               type=str, action='store',
                                metavar=('FILE-PATH'),
                                help='The file name to be saved.')
 
@@ -33,26 +37,35 @@ check_equivalence_parser.add_argument('equivalent_statements',
                                       nargs='+', type=str, action='store',
                                       metavar=('STATEMENT'),
                                       help='A set of propositional statements to be checked.')
-check_equivalence_parser.add_argument('-l', '--labels', type=str, action='store', default=None,
+check_equivalence_parser.add_argument('-l', '--labels',
+                                      type=str, action='store', default=None,
                                       metavar=('[TRUE][FALSE]'),
                                       help='Custom labels for truth values.')
-check_equivalence_parser.add_argument('-v', '--verbose', action='store_true', default=False,
+check_equivalence_parser.add_argument('-v', '--verbose',
+                                      action='store_true', default=False,
                                       help='Verbose Mode: Print the truth table and a detailed conclusion.')
-check_equivalence_parser.add_argument('-o', '--output', type=str, action='store',
+check_equivalence_parser.add_argument('-o', '--output',
+                                      type=str, action='store',
                                       metavar=('FILE-PATH'),
                                       help='The file name to be saved. \
                                         This flag is ignored when verbose mode is on.')
 
 check_validity_parser = subparsers.add_parser('check-validity',
                                               help='Check if an argument is valid.')
-check_validity_parser.add_argument('arg_premises', nargs='+', type=str, action='store',
+check_validity_parser.add_argument('arg_premises',
+                                   nargs='+', type=str, action='store',
                                    metavar=('PREMISE'),
                                    help='A set of premises.')
-check_validity_parser.add_argument('-c', '--conclusion', type=str, action='store', default=None,
+check_validity_parser.add_argument('-c', '--conclusion',
+                                   type=str, action='store', required=True,
                                    help='The conclusion of the argument.')
-check_validity_parser.add_argument('-l', '--labels', type=str, action='store', default=None,
+check_validity_parser.add_argument('-l', '--labels',
+                                   type=str, action='store', default=None,
                                    metavar=('[TRUE][FALSE]'),
                                    help='Custom labels for truth values.')
+check_validity_parser.add_argument('-r', '--reverse-values',
+                                   action='store_true', default=False,
+                                   help='Reverse the order of the truth values in the table.')
 check_validity_parser.add_argument('-o', '--output', type=str, action='store',
                                    metavar=('FILE-PATH'),
                                    help='The file name to be saved.')
@@ -79,7 +92,7 @@ elif 'equivalent_statements' in opts.keys():
     # strip all statements
     statements = [s.strip() for s in args.equivalent_statements]
     # standardize notations for all statements
-    statements = [standardize_notations(f"({s})") for s in statements]
+    # statements = [standardize_notations(f"({s})") for s in statements]
 
     # parse and compile all statements
     statements = Argument(statements,
@@ -116,7 +129,8 @@ elif 'arg_premises' in opts.keys():
 
     # parse and compile all statements
     statements = Argument(statements, conclusion=args.conclusion,
-                          labels=args.labels)
+                          labels=args.labels,
+                          reverse=args.reverse_values)
 
     # get output file name
     filename = args.output.strip() if args.output else None

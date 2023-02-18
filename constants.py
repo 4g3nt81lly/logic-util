@@ -22,6 +22,24 @@ CHECK_MARK = '\u2713'
 CROSS_MARK = '\u2717'
 
 
+# table drawing characters
+# corners
+BOX_TOP_LEFT = '\u250f'
+BOX_TOP_RIGHT = '\u2513'
+BOX_BOTTOM_LEFT = '\u2517'
+BOX_BOTTOM_RIGHT = '\u251b'
+# sides & borders
+BOX_OUTER_HLINE = '\u2501'
+BOX_OUTER_VLINE = '\u2503'
+BOX_INNER_HLINE = '\u2500'
+BOX_INNER_VLINE = '\u2502'
+# joints & intersections
+BOX_JOINT = '\u253c'
+BOX_LEFT_T = '\u2520'
+BOX_RIGHT_T = '\u2528'
+BOX_TOP_T = '\u252f'
+BOX_BOTTOM_T = '\u2537'
+
 # operator regex patterns
 XOR_PATTERNS = r'[\^\u22bb\u2295\u2a01]+|\b(XOR|xor)\b'
 

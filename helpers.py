@@ -100,7 +100,7 @@ def flatten_struct(s: list | str) -> str:
     return f"({flattened.rstrip()})"
 
 
-# check syntax
+# check syntax and simplify structure
 
 
 def check_syntax(s: list | str) -> list:
@@ -109,10 +109,10 @@ def check_syntax(s: list | str) -> list:
             f"Syntax error: Bad name '{s}'.\n{NAME_HELP}"
         return s
 
-    expr = f"Expression: ({flatten_struct(s)})\nSyntax error:"
+    expr = f"Expression: {flatten_struct(s)}\nSyntax error:"
 
     assert len(s) in range(1, 6), \
-        f"{expr} Too many arguments ({len(s)})."
+        f"{expr} Too few/many arguments ({len(s)})."
     if len(s) == 1:
         # ((...))
         body = s[0]
@@ -187,7 +187,7 @@ def parsed(s: str) -> list:
 # check if two statements are equivalent in form
 
 
-def equivalent_structs(s1: list | str, s2: list | str) -> bool:
+def equivalent_form(s1: list | str, s2: list | str) -> bool:
     if isinstance(s1, str) and isinstance(s2, str):
         # both strings
         return s1 == s2
@@ -198,11 +198,11 @@ def equivalent_structs(s1: list | str, s2: list | str) -> bool:
             if len(s1) == 1:
                 # ((...))
                 # ((...))
-                return equivalent_structs(s1[0], s2[0])
+                return equivalent_form(s1[0], s2[0])
             if len(s1) == 2:
                 # (not (...))
                 # (not (...))
-                return equivalent_structs(s1[1], s2[1])
+                return equivalent_form(s1[1], s2[1])
             elif len(s1) == 3:
                 # ((...) [operator1] (...))
                 # ((...) [operator2] (...))
@@ -214,14 +214,14 @@ def equivalent_structs(s1: list | str, s2: list | str) -> bool:
                     if (op1 in COMMUTATIVE_OPERATORS and
                             op2 in COMMUTATIVE_OPERATORS):
                         # both commutative
-                        return ((equivalent_structs(lhs1, lhs2) and
-                                 equivalent_structs(rhs1, rhs2)) or
-                                (equivalent_structs(lhs1, rhs2) and
-                                 equivalent_structs(rhs1, lhs2)))
+                        return ((equivalent_form(lhs1, lhs2) and
+                                 equivalent_form(rhs1, rhs2)) or
+                                (equivalent_form(lhs1, rhs2) and
+                                 equivalent_form(rhs1, lhs2)))
                     else:
                         # both not commutative
-                        return (equivalent_structs(lhs1, lhs2) and
-                                equivalent_structs(rhs1, rhs2))
+                        return (equivalent_form(lhs1, lhs2) and
+                                equivalent_form(rhs1, rhs2))
 
             elif len(s1) == 4:
                 # 1: (not (...) [operator1] (...))
@@ -238,26 +238,26 @@ def equivalent_structs(s1: list | str, s2: list | str) -> bool:
 
                 if s1[0] == 'not' and s2[0] == 'not':
                     # case 1
-                    return (equivalent_structs(s1[1], s2[1]) and
-                            equivalent_structs(s1[3], s2[3]))
+                    return (equivalent_form(s1[1], s2[1]) and
+                            equivalent_form(s1[3], s2[3]))
                 elif s1[2] == 'not' and s2[2] == 'not':
                     # case 4
-                    return (equivalent_structs(s1[0], s2[0]) and
-                            equivalent_structs(s1[3], s2[3]))
+                    return (equivalent_form(s1[0], s2[0]) and
+                            equivalent_form(s1[3], s2[3]))
                 elif s1[0] == 'not' and s2[2] == 'not':
                     # case 2
                     return all([s1[2] in COMMUTATIVE_OPERATORS,
                                 s2[1] in COMMUTATIVE_OPERATORS,
                                 s1[2] == s2[1],
-                                equivalent_structs(s1[1], s2[3]),
-                                equivalent_structs(s1[3], s2[0])])
+                                equivalent_form(s1[1], s2[3]),
+                                equivalent_form(s1[3], s2[0])])
                 elif s2[0] == 'not' and s1[2] == 'not':
                     # case 3
                     return all([s1[1] in COMMUTATIVE_OPERATORS,
                                 s2[2] in COMMUTATIVE_OPERATORS,
                                 s1[1] == s2[2],
-                                equivalent_structs(s1[0], s2[3]),
-                                equivalent_structs(s1[3], s2[1])])
+                                equivalent_form(s1[0], s2[3]),
+                                equivalent_form(s1[3], s2[1])])
 
             elif len(s1) == 5:
                 # (not (...) [operator1] not (...))
@@ -271,23 +271,23 @@ def equivalent_structs(s1: list | str, s2: list | str) -> bool:
                     if (op1 in COMMUTATIVE_OPERATORS and
                             op2 in COMMUTATIVE_OPERATORS):
                         # both commutative
-                        return ((equivalent_structs(lhs1, lhs2) and
-                                 equivalent_structs(rhs1, rhs2)) or
-                                (equivalent_structs(lhs1, rhs2) and
-                                 equivalent_structs(rhs1, lhs2)))
+                        return ((equivalent_form(lhs1, lhs2) and
+                                 equivalent_form(rhs1, rhs2)) or
+                                (equivalent_form(lhs1, rhs2) and
+                                 equivalent_form(rhs1, lhs2)))
                     else:
                         # both not commutative
-                        return (equivalent_structs(lhs1, lhs2) and
-                                equivalent_structs(rhs1, rhs2))
+                        return (equivalent_form(lhs1, lhs2) and
+                                equivalent_form(rhs1, rhs2))
         else:
             if len(s1) == 1:
                 # ((...))
                 # arbitrary length
-                return equivalent_structs(s1[0], s2)
+                return equivalent_form(s1[0], s2)
             elif len(s2) == 1:
                 # arbitrary length
                 # ((...))
-                return equivalent_structs(s1, s2[0])
+                return equivalent_form(s1, s2[0])
 
     return False
 
@@ -303,7 +303,7 @@ def compile(s: list):
     # check if same form already exists
     def should_add(s: list) -> bool:
         for struct in structs:
-            if equivalent_structs(s, struct):
+            if equivalent_form(s, struct):
                 return False
         return True
 
@@ -436,23 +436,24 @@ def output_table(data: Dict[str, list],
             if column == MARK_COLUMN:
                 size = 3
             # make top border
-            top_border.append('\u2501' * size)
+            top_border.append(BOX_OUTER_HLINE * size)
             # make row template
             row_template.append('{:^' + str(size) + '}')
             # make row separator
-            row_separator.append('\u2500' * size)
+            row_separator.append(BOX_INNER_HLINE * size)
             # make footer
-            bottom_border.append('\u2501' * size)
+            bottom_border.append(BOX_OUTER_HLINE * size)
 
-        top_border = '\u252f'.join(top_border)
-        row_template = '\u2502'.join(row_template)
-        row_separator = '\u253c'.join(row_separator)
-        bottom_border = '\u2537'.join(bottom_border)
+        top_border = BOX_TOP_T.join(top_border)
+        row_template = BOX_INNER_VLINE.join(row_template)
+        row_separator = BOX_JOINT.join(row_separator)
+        bottom_border = BOX_BOTTOM_T.join(bottom_border)
 
-        top_border = f"\u250f{top_border}\u2513"
-        row_template = f"\u2503{row_template}\u2503"
-        row_separator = f"\n\u2520{row_separator}\u2528\n"
-        bottom_border = f"\u2517{bottom_border}\u251b"
+        top_border = BOX_TOP_LEFT + top_border + BOX_TOP_RIGHT
+        row_template = BOX_OUTER_VLINE + row_template + BOX_OUTER_VLINE
+        row_separator = BOX_LEFT_T + row_separator + BOX_RIGHT_T
+        row_separator = '\n' + row_separator + '\n'
+        bottom_border = BOX_BOTTOM_LEFT + bottom_border + BOX_BOTTOM_RIGHT
 
         # initialize rows with header
         # hide CHECK/CROSS key
@@ -473,7 +474,7 @@ def output_table(data: Dict[str, list],
                 # substitution handler
                 def substitute(value: str) -> str:
                     return true if value == 1 else (false if value == 0 else value)
-                
+
                 values = list(map(substitute, values))
             rows.append(row_template.format(*values))
 
