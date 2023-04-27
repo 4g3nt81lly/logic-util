@@ -115,8 +115,15 @@ class Proposition:
                 print(UNEXPECTED_ERROR, err)
                 exit()
         else:
-            # NOTE: can raise exceptions
-            parsed_struct = parsed(statement)
+            # redirect exceptions
+            try:
+                parsed_struct = parsed(statement)
+            except AssertionError as err:
+                raise SyntaxError(err)
+            except SyntaxError as err:
+                raise SyntaxError(UNMATCHED_PARENTHESES)
+            except Exception as err:
+                raise Exception(UNEXPECTED_ERROR, err)
 
         if parsed_struct == []:
             print(NULL_STATEMENT)

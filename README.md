@@ -10,7 +10,7 @@ $(a\lor\neg c)\veebar(\neg b\lor c)\equiv\left(\neg a\land(\neg b\to c))\lor(a\l
 
 I grew weary of doing long-winded truth tables just to verify if I had done the proof right, so I decided to write a tool that does the dirty work for me.
 
-I find this quite handy as I use it occasionally to see if my "logic" is right, and I think it may benefit those propositional logic beginners, so here we are!
+I find this quite handy as I use it occasionally to see if my "logic" is right, and I think it may benefit propositional logic learners out there, so here we are!
 
 **Scenarios:**
 
@@ -34,21 +34,23 @@ I find this quite handy as I use it occasionally to see if my "logic" is right, 
 <details>
  <summary><h3 style="margin-top: .5em; margin-bottom: .25em;">&ensp;Working with source code</h3><br/>Windows-friendly.</summary>
  
- ### Install Python 3.8+
+ #### Install Python 3.8+
  Here I'm only showing with Homebrew (but really, you can get it from anywhere, as long as it's legit):
  
  ```shell
  brew install python3
  ```
  
- ### Download source code
+ #### Download source code
  Download the source code and decompress it.
  
- ### Done!
- You're all set! No dependencies whatsoever! Feel free to do this and get started:
+ #### Done!
+ You're all set! No dependencies whatsoever!  
+ Feel free to do this and get started:
  
  ```shell
- cd /path/to/source/code/root
+ cd /source/code/root
+ python3 ./logic.py [...] # do this instead of ./logic-util
  ```
 </details>
 <details>
@@ -56,6 +58,14 @@ I find this quite handy as I use it occasionally to see if my "logic" is right, 
  
  #### Download binary
  Download the latest binary from [releases](https://github.com/4g3nt81lly/logic-util/releases).
+
+
+ #### Change file mode
+ You may need to change the file mode of `logic-util` to use it:
+ ```shell
+ cd /root/of/binary
+ chmod +x ./logic-util
+ ```
  
  #### Done!
  You're all set! No dependencies, not even Python!
@@ -401,10 +411,11 @@ Upon entering the interactive mode, you will be prompted to enter the premise(s)
 To exit, hit <kbd>Ctrl</kbd> + <kbd>C</kbd> or <kbd>Ctrl</kbd> + <kbd>D</kbd>.
 
 ## 🖍&ensp;To Dos
+- [ ] Support for tautologies ($\top$) and contradictions ($\bot$).
 - [ ] A better documentation.
-- [ ] A neater codebase.
+- [ ] A neater codebase (some ugly code in there).
 - [ ] More tests.
-- [ ] Better error handling.
+- [ ] More helpful error messages.
 - [ ] Validity test using formal proof with rules of inference.
 - [ ] Validity/Equivalency test with the [truth tree method (the semantic tableaux)](https://en.wikipedia.org/wiki/Method_of_analytic_tableaux).
 - [ ] First-order logic statement evaluation and validity/equivalency test (with the truth tree method).

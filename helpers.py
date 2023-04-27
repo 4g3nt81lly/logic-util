@@ -3,6 +3,7 @@ from itertools import permutations
 import csv
 from os import path
 from typing import Dict
+from sys import exit
 
 from constants import *
 
@@ -87,8 +88,8 @@ def standardize_notations(s: str) -> str:
 
 
 def flatten(s: list):
-    def _flatten(s: list | str,
-              op: str | None = None):
+    def _flatten(s: list | str, 
+                 op: str | None = None):
         if isinstance(s, str):
             return s
 
@@ -130,7 +131,16 @@ def flatten(s: list):
         raise SyntaxError(UNEXPECTED_ERROR)
 
     flattened = _flatten(s)
-    return list(flattened)
+    if isinstance(flattened, (tuple, list)):
+        # flattened struct either in tuple or list
+        flattened = list(flattened)
+    elif isinstance(flattened, str):
+        # propositional constant (a variable without any operators)
+        flattened = [flattened]
+    else:
+        # NOTE: should NEVER get here
+        raise Exception(UNEXPECTED_ERROR)
+    return flattened
 
 
 # convert a parsed structure into display sentence
@@ -194,7 +204,7 @@ def good_name(name: str) -> bool:
     return bool(match(pattern, name))
 
 
-# check syntax and preprocess
+# check syntax
 
 
 def check_syntax(s: list | str) -> list:
@@ -212,13 +222,15 @@ def check_syntax(s: list | str) -> list:
         body = s[0]
         if isinstance(body, str):
             assert body not in OPERATORS, \
-                f"{expr} Expected a name, but found an operator."
+                f"{expr} Expecting a name, but found an operator."
         return check_syntax(body)
     elif len(s) == 2:
         # (not (...))
-        assert (s[0] == 'not' and
-                s[1] not in OPERATORS), \
-            f"{expr} Invalid or missing arguments."
+        not_op, operand = s
+        assert not_op == 'not', \
+            f"{expr} Expecting a negation operator, but found '{not_op}'."
+        assert operand not in OPERATORS, \
+            f"{expr} Expecting a name, but found an operator '{DISPLAY_OPERATORS[operand]}'."
         return ['not', check_syntax(s[1])]
     elif len(s) > 2:
         for operator in OPS_BY_PRECEDENCE:
@@ -228,7 +240,7 @@ def check_syntax(s: list | str) -> list:
                 continue
             else:
                 return [check_syntax(s[:index]), operator, check_syntax(s[index + 1:])]
-        errmsg = f"{expr} Expected an operator in expression but found none."
+        errmsg = f"{expr} Expecting an operator in expression but found none."
         raise AssertionError(errmsg)
 
 
@@ -245,9 +257,9 @@ def parsed(s: str) -> list:
     s = sub(r'\)(?!$)', '],', s)
     s = s.replace(')', ']')  # last ) should not end in ,
 
-    struct = eval(s)
+    struct = list(eval(s))
     _ = check_syntax(struct)
-    return list(struct)
+    return struct
 
 
 # check if two statements are equivalent in form

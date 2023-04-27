@@ -1,4 +1,3 @@
-#!/opt/homebrew/bin/python3
 import argparse
 # avoid arrow key values
 # reference: https://stackoverflow.com/a/66539061/10446972
@@ -12,7 +11,7 @@ parser = argparse.ArgumentParser(prog='Logic',
 
 subparsers = parser.add_subparsers()
 make_table_parser = subparsers.add_parser('make-table',
-                                          help='Make a truth table using the given propositional statement.')
+                                          help='Make a truth table for the given propositional statement.')
 make_table_parser.add_argument('table_statement',
                                nargs='?', type=str, action='store', default=None,
                                metavar=('STATEMENT'),
@@ -30,10 +29,10 @@ make_table_parser.add_argument('-r', '--reverse-values',
 make_table_parser.add_argument('-o', '--output',
                                type=str, action='store',
                                metavar=('FILE-PATH'),
-                               help='The file name to be saved.')
+                               help='The file path to be saved.')
 
 check_equivalence_parser = subparsers.add_parser('check-equivalence',
-                                                 help="Check if two statements are logically equivalent.")
+                                                 help="Check if multiple statements are logically equivalent.")
 check_equivalence_parser.add_argument('equivalent_statements',
                                       nargs='*', type=str, action='store', default=None,
                                       metavar=('STATEMENT'),
@@ -44,11 +43,11 @@ check_equivalence_parser.add_argument('-l', '--labels',
                                       help='Custom labels for truth values.')
 check_equivalence_parser.add_argument('-v', '--verbose',
                                       action='store_true', default=False,
-                                      help='Verbose Mode: Print the truth table and a detailed conclusion.')
+                                      help='Verbose Mode: Show truth table for each equivalency test combination.')
 check_equivalence_parser.add_argument('-o', '--output',
                                       type=str, action='store',
                                       metavar=('FILE-PATH'),
-                                      help='The file name to be saved. \
+                                      help='The file path to be saved. \
                                         This flag is ignored when verbose mode is on.')
 
 check_validity_parser = subparsers.add_parser('check-validity',
@@ -59,7 +58,8 @@ check_validity_parser.add_argument('arg_premises',
                                    help='A set of premises.')
 check_validity_parser.add_argument('-c', '--conclusion',
                                    type=str, action='store', default=None,
-                                   help='The conclusion of the argument.')
+                                   help='(Optional) The conclusion of the argument. \
+                                    The last premise will be used as the conclusion if one is\'t provided.')
 check_validity_parser.add_argument('-l', '--labels',
                                    type=str, action='store', default=None,
                                    metavar=('[FALSE][TRUE]'),
@@ -69,7 +69,7 @@ check_validity_parser.add_argument('-r', '--reverse-values',
                                    help='Reverse the order of the truth values in the table.')
 check_validity_parser.add_argument('-o', '--output', type=str, action='store',
                                    metavar=('FILE-PATH'),
-                                   help='The file name to be saved.')
+                                   help='The file path to be saved.')
 
 # get arguments
 args = parser.parse_args()
@@ -78,10 +78,11 @@ opts = vars(args)
 
 if 'table_statement' in opts.keys():
     # make truth table
-    def make_table(statement: str):
+    def make_table(statement: str, handle_error: bool = True):
         statement = Proposition(statement,
                                 labels=args.labels,
-                                reverse=args.reverse_values)
+                                reverse=args.reverse_values,
+                                handle_error=handle_error)
 
         # get output file name
         filename = args.output.strip() if args.output else None
@@ -102,7 +103,11 @@ if 'table_statement' in opts.keys():
         if statement == '':
             exit()
 
-        make_table(statement)
+        try:
+            make_table(statement, handle_error=False)
+        except Exception as err:
+            print(err)
+            continue
 
 elif 'equivalent_statements' in opts.keys():
     # check equivalence
@@ -121,13 +126,12 @@ elif 'equivalent_statements' in opts.keys():
 
         equivalent = statements.all_equivalent(verbose=args.verbose)
 
-        print()
+        print(end=('' if filename else '\n'))
 
         # print conclusion
         if equivalent:
             # equivalent
             print(
-                '\n',
                 bold(green(CHECK_MARK,
                            'The statements are logically equivalent!'))
             )
@@ -211,7 +215,8 @@ elif 'equivalent_statements' in opts.keys():
             try:
                 statement = Proposition(statement,
                                         handle_error=False)
-            except (Exception, AssertionError, SyntaxError):
+            except Exception as err:
+                print(err)
                 continue
 
             # get commutative/associative-equivalent statements
@@ -251,13 +256,14 @@ elif 'arg_premises' in opts.keys():
 
         valid = argument.is_valid(print_countermodel=True)
 
+        print(end=('' if filename else '\n'))
+
         # print conclusion
         if valid:
             # valid
             print(bold(green(CHECK_MARK, 'The argument is valid!')))
         else:
             # invalid
-            print()
             print(bold(red(CROSS_MARK, 'The argument is invalid!')))
 
         print()
@@ -312,7 +318,8 @@ elif 'arg_premises' in opts.keys():
             try:
                 premise = Proposition(premise,
                                       handle_error=False)
-            except (Exception, AssertionError, SyntaxError):
+            except Exception as err:
+                print(err)
                 continue
 
             premises.append(premise)
@@ -339,8 +346,10 @@ elif 'arg_premises' in opts.keys():
                     continue
             else:
                 try:
-                    conclusion = Proposition(conclusion)
-                except (Exception, AssertionError, SyntaxError):
+                    conclusion = Proposition(conclusion,
+                                             handle_error=False)
+                except Exception as err:
+                    print(err)
                     continue
 
                 break
