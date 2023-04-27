@@ -1,295 +1,339 @@
-import re
+from re import sub, subn, match
+from itertools import permutations
 import csv
+from os import path
 from typing import Dict
 
 from constants import *
 
 
-def bold(*msg) -> str:
-    _msg = ' '.join(msg)
-    return f"\033[1m{_msg}\033[0m"
+def bold(*msg, sep = ' ') -> str:
+    msg = sep.join(msg)
+    return f"\033[1m{msg}\033[0m"
 
 
-def green(*msg) -> str:
-    _msg = ' '.join(msg)
-    return f"\033[32m{_msg}\033[0m"
+def green(*msg, sep = ' ') -> str:
+    msg = sep.join(msg)
+    return f"\033[32m{msg}\033[0m"
 
 
-def yellow(*msg) -> str:
-    _msg = ' '.join(msg)
-    return f"\033[33m{_msg}\033[0m"
+def yellow(*msg, sep = ' ') -> str:
+    msg = sep.join(msg)
+    return f"\033[33m{msg}\033[0m"
 
 
 def red(*msg) -> str:
-    _msg = ' '.join(msg)
-    return f"\033[91m{_msg}\033[0m"
+    msg = ' '.join(msg)
+    return f"\033[91m{msg}\033[0m"
 
 
-# toggle between compilable and display symbols
+def separator(length: int):
+    print('\u2500' * length)
 
 
-def standardize_notations(sentence: str, display: bool = False) -> str:
-    new_sentence = re.sub(r'\s+', ' ', sentence)
+def confirm(prompt: str) -> bool:
+    try:
+        response = input(prompt).strip().lower()
+    except KeyboardInterrupt:
+        print()
+        return False
+    except EOFError:
+        exit()
 
-    # replacement
-    # XOR
-    xor_operator = XOR_SYMBOL if display else XOR_OP  # ^
-    # OR
-    or_operator = OR_SYMBOL if display else OR_OP    # |
-    # AND
-    and_operator = AND_SYMBOL if display else AND_OP  # &
-    # NOT
-    not_operator = NOT_SYMBOL if display else NOT_OP    # 1&~
-    # IMPLICATION: a -> b = ~a OR b
-    implies_operator = IMPLIES_SYMBOL if display else IMPLIES_OP  # ^1|
-    # BICONDITIONAL
-    iff_operator = IFF_SYMBOL if display else IFF_OP  # ^1^
+    return response in ['yes', 'y']
 
-    # substitution: ORDER DOES MATTER!
-    # 1st-last: NOT -> AND -> IFF -> IMPLY -> XOR -> OR
-    # compiler: 1&~ ->  &  -> ^1^ ->  ^1|  ->  ^  -> |
+# standardize notations before compilation
 
-    # matching NOT before AND
-    # so that 1&~ doesn't get matched by &
-    new_sentence = re.sub(NOT_PATTERNS, not_operator, new_sentence)
-    new_sentence = re.sub(AND_PATTERNS, and_operator, new_sentence)
-    # matching IFF before IMPLY and XOR
-    # so that <-> doesn't get matched by ->
-    # so that ^1^ doesn't get matched by ^
-    new_sentence = re.sub(IFF_PATTERNS, iff_operator, new_sentence)
-    # matching IMPLY before OR and XOR
-    # so that ^1| doesn't get matched by | or ^
-    new_sentence = re.sub(IMPLIES_PATTERNS, implies_operator, new_sentence)
+
+def standardize_notations(s: str) -> str:
+    s = sub(r'\s+', ' ', s)
+
+    s = sub(AND_PATTERNS, AND_OP, s)
     # matching XOR before OR
     # so that XOR doesn't get matched by OR
-    new_sentence = re.sub(XOR_PATTERNS, xor_operator, new_sentence)
-    new_sentence = re.sub(OR_PATTERNS, or_operator, new_sentence)
+    s = sub(XOR_PATTERNS, XOR_OP, s)
+    s = sub(OR_PATTERNS, OR_OP, s)
+    # matching IFF before IMPLY
+    # so that <-> doesn't get matched by ->
+    s = sub(IFF_PATTERNS, IFF_OP, s)
+    s = sub(IMPLIES_PATTERNS, IMPLIES_OP, s)
+    # match NOT last so that spaces are properly added
+    s = sub(NOT_PATTERNS, NOT_OP, s)
 
-    # remove extra whitespaces
-    new_sentence = re.sub(r'\s+', ' ', new_sentence)
+    s = sub(r'\s+', ' ', s)
+
+    # handle cases: ( not ...
+    s = sub(r'\(\s+not', '(not', s)
 
     # remove extra parentheses for non-expressions
-    pattern = r'\((\u00ac?[a-zA-Z_]\w*)\)'
+    # examples: (a), (not a), (not not not a)
+    pattern = r'\(((?:not )*[a-zA-Z_]\w*)\)'
     while True:
-        new_sentence, count = re.subn(pattern, r'\1', new_sentence)
+        s, count = subn(pattern, r'\1', s)
         if count == 0:
             break
 
-    return new_sentence
+    # apply the rule for double negation
+    pattern = r'(\s|\()(not\s){2}'
+    while True:
+        s, count = subn(pattern, r'\1', s)
+        if count == 0:
+            break
+
+    return s
 
 
-# determine if a variable name conforms to the rules
+# flatten all associative expressions
+
+
+def flatten(s: list):
+    def _flatten(s: list | str,
+              op: str | None = None):
+        if isinstance(s, str):
+            return s
+
+        # ASSUME a list
+        assert isinstance(s, list)
+
+        if len(s) == 1:
+            # ((...))
+            return _flatten(s[0], op)
+        elif len(s) == 2:
+            # (not (...))
+            arg = _flatten(s[1])
+            # unpack ONLY IF it is not a variable
+            arg = [*arg] if isinstance(arg, tuple) else [arg]
+            return 'not', *arg
+        elif len(s) > 2:
+            for operator in OPS_BY_PRECEDENCE:
+                try:
+                    index = s.index(operator)
+                except ValueError:
+                    continue
+
+                # apply to both sides
+                lhs = _flatten(s[:index], operator)
+                rhs = _flatten(s[index + 1:], operator)
+
+                # unpack ONLY IF it is not a variable
+                lhs = [*lhs] if isinstance(lhs, tuple) else [lhs]
+                rhs = [*rhs] if isinstance(rhs, tuple) else [rhs]
+
+                # apply associativity for associative operators
+                # and ONLY IF the current operator is same as the outer scope
+                if operator in ASSOCIATIVE_OPERATORS and operator == op:
+                    return *lhs, operator, *rhs
+
+                return [*lhs, operator, *rhs]
+
+        # NOTE: should NEVER get here
+        raise SyntaxError(UNEXPECTED_ERROR)
+
+    flattened = _flatten(s)
+    return list(flattened)
+
+
+# convert a parsed structure into display sentence
+
+
+def render(s: list, flattened: bool = True) -> str:
+    def _render(s: list | str,
+                outermost: bool = False) -> str:
+        if isinstance(s, str):
+            return s
+        # ASSUME a list
+        if len(s) == 1:
+            # ((...))
+            return _render(s[0])
+        elif len(s) == 2:
+            # (not (...))
+            return f"{DISPLAY_OPERATORS['not']}{_render(s[1])}"
+        elif len(s) > 2:
+            results = []
+            # whether the current item is the arg of a NOT operator
+            not_arg = False
+            for i, j in enumerate(s):
+                if not_arg:
+                    not_arg = False
+                    continue
+                assert isinstance(j, (str, list)), UNEXPECTED_ERROR
+                if isinstance(j, list):
+                    # expression
+                    results.append(_render(j))
+                else:
+                    if j in OPS_BY_PRECEDENCE:
+                        # binary operators
+                        results.append(DISPLAY_OPERATORS[j])
+                    elif j == 'not':
+                        # unary operator: NOT
+                        results.append(_render(s[i:i + 2]))
+                        not_arg = True
+                    else:
+                        # variable
+                        results.append(j)
+            results = ' '.join(results)
+            if outermost:
+                return results
+            return f"({results})"
+
+        # NOTE: should NEVER get here
+        raise SyntaxError(UNEXPECTED_ERROR)
+
+    _s = s
+    if flattened:
+        _s = flatten(s)
+    return _render(_s, outermost=True)
+
+
+# determine if a variable name conforms to the rules:
+# 1. begins with a-z, A-Z or _ (underscore)
+# 2. contains only a-z, A-Z, 0-9 or _
+# 3. does not contain any spaces
 def good_name(name: str) -> bool:
     pattern = r'^[a-zA-Z_]\w*$'
-    return bool(re.match(pattern, name))
+    return bool(match(pattern, name))
 
 
-# convert a struct back to statement sentence
-
-
-def flatten_struct(s: list | str) -> str:
-    if isinstance(s, str):
-        return s
-    flattened = ''
-    for element in s:
-        if isinstance(element, str):
-            flattened += element
-        elif isinstance(element, list):
-            flattened += flatten_struct(element)
-        flattened += ' '
-    return f"({flattened.rstrip()})"
-
-
-# check syntax and simplify structure
+# check syntax and preprocess
 
 
 def check_syntax(s: list | str) -> list:
+    expr = 'Syntax error:'
+
     if isinstance(s, str):
         assert good_name(s), \
-            f"Syntax error: Bad name '{s}'.\n{NAME_HELP}"
+            f"{expr} Bad name '{s}'.\n{NAME_HELP}"
         return s
 
-    expr = f"Expression: {flatten_struct(s)}\nSyntax error:"
+    assert len(s) > 0, f"{expr} Too few arguments."
 
-    assert len(s) in range(1, 6), \
-        f"{expr} Too few/many arguments ({len(s)})."
     if len(s) == 1:
         # ((...))
         body = s[0]
         if isinstance(body, str):
             assert body not in OPERATORS, \
-                f"{expr} Expected an expression, but found an operator."
-            return body
-        return check_syntax(s[0])
+                f"{expr} Expected a name, but found an operator."
+        return check_syntax(body)
     elif len(s) == 2:
         # (not (...))
         assert (s[0] == 'not' and
                 s[1] not in OPERATORS), \
             f"{expr} Invalid or missing arguments."
         return ['not', check_syntax(s[1])]
-    elif len(s) == 3:
-        # ((...) [operator] (...))
-        assert s[1] in OPERATORS, \
-            f"{expr} Invalid operator '{s[1]}'."
-        assert s[0] not in OPERATORS, \
-            f"{expr} Expected an expression at position 1, but found an operator '{s[0]}'."
-        assert s[2] not in OPERATORS, \
-            f"{expr} Expected an expression at position 3, but found an operator '{s[2]}'."
-        return [check_syntax(s[0]), s[1], check_syntax(s[2])]
-    elif len(s) == 4:
-        # (not (...) [operator] (...))
-        # ((...) [operator] not (...))
-        case1 = [s[0] == 'not',
-                 s[2] in OPERATORS,
-                 s[1] not in OPERATORS,
-                 s[3] not in OPERATORS]
-        case2 = [s[2] == 'not',
-                 s[1] in OPERATORS,
-                 s[0] not in OPERATORS,
-                 s[3] not in OPERATORS]
-        assert all(case1) or all(case2), \
-            f"{expr} Invalid operand format."
-        if all(case1):
-            return ['not', check_syntax(s[1]), s[2], check_syntax(s[3])]
-        else:
-            return [check_syntax(s[0]), s[1], 'not', check_syntax(s[3])]
-    elif len(s) == 5:
-        # (not (...) [operator] not (...))
-        assert s[0] == 'not' and s[3] == 'not', \
-            f"{expr} Unexpected token in expression."
-        assert s[2] in OPERATORS, \
-            f"{expr} Expected an operator, but found '{s[2]}'."
-        assert s[1] not in OPERATORS, \
-            f"{expr} Expected an expression, but found an operator '{s[1]}'."
-        assert s[4] not in OPERATORS, \
-            f"{expr} Expected an expression, but found an operator '{s[4]}'."
-        return ['not', check_syntax(s[1]), s[2], 'not', check_syntax(s[4])]
+    elif len(s) > 2:
+        for operator in OPS_BY_PRECEDENCE:
+            try:
+                index = s.index(operator)
+            except ValueError:
+                continue
+            else:
+                return [check_syntax(s[:index]), operator, check_syntax(s[index + 1:])]
+        errmsg = f"{expr} Expected an operator in expression but found none."
+        raise AssertionError(errmsg)
 
 
-# parse a propositional statement (nested list)
+# parse a propositional statement (to nested list)
 
 
 def parsed(s: str) -> list:
-    _s = standardize_notations(f"({s})", display=False)
     # for each component: add quotes and separate by ,
-    _s = re.sub(r'([^\s()]+\b|[^\w\s()]+\B)',
-                r'"\1",',
-                _s)
+    s = sub(r'([^\s()]+\b|[^\w\s()]+\B)',
+               r'"\1",',
+               s)
     # convert () to python list notation [[...],]
-    _s = _s.replace('(', '[')
-    _s = re.sub(r'\)(?!$)', '],', _s)
-    _s = _s.replace(')', ']')  # last ) should not end in ,
+    s = s.replace('(', '[')
+    s = sub(r'\)(?!$)', '],', s)
+    s = s.replace(')', ']')  # last ) should not end in ,
 
-    parsed = eval(_s)
-    return check_syntax(parsed)
+    struct = eval(s)
+    _ = check_syntax(struct)
+    return list(struct)
 
 
 # check if two statements are equivalent in form
+# NOTE: this function can only check structures that have already been flattened:
+#       E.g. (a or b or c), (a and b and c), (a xor b xor c), (a iff b iff c)
+#       expressions of the form '(a or (b or c))' or '(a and (b and c))' should not exist
 
 
-def equivalent_form(s1: list | str, s2: list | str) -> bool:
-    if isinstance(s1, str) and isinstance(s2, str):
-        # both strings
-        return s1 == s2
-    elif isinstance(s1, list) and isinstance(s2, list):
-        # both lists
+def equivalent_form(s1: list, s2: list) -> bool:
+    def equivalent(s1: list | str, s2: list | str) -> bool:
+        if isinstance(s1, str) and isinstance(s2, str):
+            # both strings
+            return s1 == s2
+        elif isinstance(s1, list) and isinstance(s2, list):
+            # both lists
+            if len(s1) == len(s2):
+                if len(s1) == 1:
+                    # ((...))
+                    # ((...))
+                    return equivalent(s1[0], s2[0])
+                if len(s1) == 2:
+                    # (not (...))
+                    # (not (...))
+                    return equivalent(s1[1], s2[1])
+                elif len(s1) > 2:
+                    def separate(struct, operator):
+                        result = []
+                        sublist = []
+                        for item in struct:
+                            if item == operator:
+                                result.append(sublist)
+                                sublist = []
+                            else:
+                                sublist.append(item)
+                        result.append(sublist)
+                        return result
 
-        if len(s1) == len(s2):
-            if len(s1) == 1:
-                # ((...))
-                # ((...))
-                return equivalent_form(s1[0], s2[0])
-            if len(s1) == 2:
-                # (not (...))
-                # (not (...))
-                return equivalent_form(s1[1], s2[1])
-            elif len(s1) == 3:
-                # ((...) [operator1] (...))
-                # ((...) [operator2] (...))
-                lhs1, op1, rhs1 = s1
-                lhs2, op2, rhs2 = s2
+                    for operator in COMMUTATIVE_OPERATORS:
+                        # find the same commutative operators in both expressions
+                        components1 = separate(s1, operator)
+                        components2 = separate(s2, operator)
+                        # only the same number of components separated by
+                        # a commutative operator can potentially be equivalent
+                        if len(components1) == len(components2) and len(components1) > 1:
+                            # get all permutations
+                            perms = permutations(components1, len(components1))
+                            # for each arrangement, check one-to-one equivalence
+                            # a1 = a2, b1 = b2, c1 = c2, ...
 
-                if op1 == op2:
-                    # same operator
-                    if (op1 in COMMUTATIVE_OPERATORS and
-                            op2 in COMMUTATIVE_OPERATORS):
-                        # both commutative
-                        return ((equivalent_form(lhs1, lhs2) and
-                                 equivalent_form(rhs1, rhs2)) or
-                                (equivalent_form(lhs1, rhs2) and
-                                 equivalent_form(rhs1, lhs2)))
-                    else:
-                        # both not commutative
-                        return (equivalent_form(lhs1, lhs2) and
-                                equivalent_form(rhs1, rhs2))
+                            for perm in perms:
+                                all_equivalent = True
+                                # one-to-one correspondence
+                                for case1, component2 in zip(perm, components2):
+                                    # if any not equivalent in the arrangement
+                                    # skip to next arrangement
 
-            elif len(s1) == 4:
-                # 1: (not (...) [operator1] (...))
-                #    (not (...) [operator2] (...))
-                #
-                # 2: (not (...) [and/or/xor/iff] (...))
-                #    ((...) [and/or/xor/iff] not (...))
-                #
-                # 3: ((...) [and/or/xor/iff] not (...))
-                #    (not (...) [and/or/xor/iff] (...))
-                #
-                # 4: ((...) [operator1] not (...))
-                #    ((...) [operator2] not (...))
-
-                if s1[0] == 'not' and s2[0] == 'not':
-                    # case 1
-                    return (equivalent_form(s1[1], s2[1]) and
-                            equivalent_form(s1[3], s2[3]))
-                elif s1[2] == 'not' and s2[2] == 'not':
-                    # case 4
-                    return (equivalent_form(s1[0], s2[0]) and
-                            equivalent_form(s1[3], s2[3]))
-                elif s1[0] == 'not' and s2[2] == 'not':
-                    # case 2
-                    return all([s1[2] in COMMUTATIVE_OPERATORS,
-                                s2[1] in COMMUTATIVE_OPERATORS,
-                                s1[2] == s2[1],
-                                equivalent_form(s1[1], s2[3]),
-                                equivalent_form(s1[3], s2[0])])
-                elif s2[0] == 'not' and s1[2] == 'not':
-                    # case 3
-                    return all([s1[1] in COMMUTATIVE_OPERATORS,
-                                s2[2] in COMMUTATIVE_OPERATORS,
-                                s1[1] == s2[2],
-                                equivalent_form(s1[0], s2[3]),
-                                equivalent_form(s1[3], s2[1])])
-
-            elif len(s1) == 5:
-                # (not (...) [operator1] not (...))
-                # (not (...) [operator2] not (...))
-
-                lhs1, op1, rhs1 = s1[1], s1[2], s1[4]
-                lhs2, op2, rhs2 = s2[1], s2[2], s2[4]
-
-                if op1 == op2:
-                    # same operator
-                    if (op1 in COMMUTATIVE_OPERATORS and
-                            op2 in COMMUTATIVE_OPERATORS):
-                        # both commutative
-                        return ((equivalent_form(lhs1, lhs2) and
-                                 equivalent_form(rhs1, rhs2)) or
-                                (equivalent_form(lhs1, rhs2) and
-                                 equivalent_form(rhs1, lhs2)))
-                    else:
-                        # both not commutative
-                        return (equivalent_form(lhs1, lhs2) and
-                                equivalent_form(rhs1, rhs2))
+                                    if not equivalent(case1, component2):
+                                        all_equivalent = False
+                                        break
+                                if all_equivalent:
+                                    return True
+            else:
+                if len(s1) == 1:
+                    # ((...))
+                    # arbitrary length
+                    return equivalent(s1[0], s2)
+                elif len(s2) == 1:
+                    # arbitrary length
+                    # ((...))
+                    return equivalent(s1, s2[0])
         else:
-            if len(s1) == 1:
+            # one string, one list
+            if isinstance(s1, list) and len(s1) == 1:
                 # ((...))
-                # arbitrary length
-                return equivalent_form(s1[0], s2)
-            elif len(s2) == 1:
-                # arbitrary length
+                # variable (str)
+                return equivalent(s1[0], s2)
+            elif isinstance(s2, list) and len(s2) == 1:
+                # variable (str)
                 # ((...))
-                return equivalent_form(s1, s2[0])
+                return equivalent(s1, s2[0])
 
-    return False
+        return False
+
+    # _s1 = preprocess(s1)
+    # _s2 = preprocess(s2)
+    return equivalent(s1, s2)
 
 
 # compile a parsed statement
@@ -310,105 +354,130 @@ def compile(s: list):
     def _compile(s: list | str,
                  variables: set[str],
                  atoms: list[str],
-                 structs: list) -> str:
+                 structs: list,
+                 outermost: bool = False) -> str:
         # variables/operators
         if isinstance(s, str):
             variables.add(s)
+            # print(s, variables)
             return s
 
         # encapsulated expression
-        assert isinstance(s, list) and len(s) in range(1, 6)
+        assert isinstance(s, list) and len(s) > 0
 
         # do not include those with redundant parentheses or equivalent forms
 
         if len(s) == 1:
             # ((...))
             # get rid of encapsulating parentheses
-            expr = _compile(s[0], variables, atoms, structs)
-            if should_add(s[0]):
+            body = s[0]
+            expr = _compile(body, variables, atoms, structs)
+            # check for equivalent form and
+            # whether the expr is a variable
+            if should_add(body) and expr not in variables:
                 atoms.append(expr)
-                structs.append(s[0])
+                structs.append(body)
             return expr
         elif len(s) == 2:
             # (not (...))
-            assert s[0] == 'not'
-            expr = _compile(s[1], variables, atoms, structs)
-            if should_add(s[1]):
-                atoms.append(expr)
-                structs.append(s[1])
-            return f"({OPERATOR_TOKENS['not']}{expr})"
-        elif len(s) == 3:
-            # ((...) [operator] (...))
-            lhs = _compile(s[0], variables, atoms, structs)
-            rhs = _compile(s[2], variables, atoms, structs)
-            if should_add(s[0]):
-                atoms.append(lhs)
-                structs.append(s[0])
-            if should_add(s[2]):
-                atoms.append(rhs)
-                structs.append(s[2])
-            return f"({lhs}{OPERATOR_TOKENS[s[1]]}{rhs})"
-        elif len(s) == 4:
-            # 1: (not (...) [operator] (...))
-            # 2: ((...) [operator] not (...))
-            assert s[0] == 'not' or s[2] == 'not'
             if s[0] == 'not':
-                # case 1
-                lhs = _compile(s[1], variables, atoms, structs)
-                rhs = _compile(s[3], variables, atoms, structs)
-                if should_add(s[1]):
-                    atoms.append(lhs)
-                    structs.append(s[1])
-                if should_add(s[3]):
-                    atoms.append(rhs)
-                    structs.append(s[3])
-                return f"(({OPERATOR_TOKENS['not']}{lhs}){OPERATOR_TOKENS[s[2]]}{rhs})"
-            elif s[2] == 'not':
-                # case 2
-                lhs = _compile(s[0], variables, atoms, structs)
-                rhs = _compile(s[3], variables, atoms, structs)
-                if should_add(s[0]):
-                    atoms.append(lhs)
-                    structs.append(s[0])
-                if should_add(s[3]):
-                    atoms.append(rhs)
-                    structs.append(s[3])
-                return f"({lhs}{OPERATOR_TOKENS[s[1]]}({OPERATOR_TOKENS['not']}{rhs}))"
-        elif len(s) == 5:
-            # (not (...) [operator] not (...))
-            assert s[0] == 'not' and s[3] == 'not'
-            lhs = _compile(s[1], variables, atoms, structs)
-            rhs = _compile(s[4], variables, atoms, structs)
-            if should_add(s[1]):
-                atoms.append(lhs)
-                structs.append(s[1])
-            if should_add(s[4]):
-                atoms.append(rhs)
-                structs.append(s[4])
-            return f"(({OPERATOR_TOKENS['not']}{lhs}){OPERATOR_TOKENS[s[2]]}({OPERATOR_TOKENS['not']}{rhs}))"
+                body = s[1]
+                expr = _compile(body, variables, atoms, structs)
+                # check for equivalent form and
+                # whether the expr is a variable
+                if should_add(body) and expr not in variables:
+                    atoms.append(expr)
+                    structs.append(body)
+                expr = f"{BINARY_OPERATORS['not']}{expr}"
+                if outermost:
+                    return expr
+                return f"({expr})"
+        elif len(s) > 2:
+            expr = []
+            not_arg = False
+            for i, j in enumerate(s):
+                if not_arg:
+                    not_arg = False
+                    continue
+                assert isinstance(j, (str, list)), UNEXPECTED_ERROR
+                if isinstance(j, list):
+                    # expression
+                    expr.append(_compile(j, variables, atoms, structs))
+                else:
+                    if j in OPS_BY_PRECEDENCE:
+                        # binary operators
+                        expr.append(BINARY_OPERATORS[j])
+                    elif j == 'not':
+                        # unary operator
+                        body = s[i:i + 2]
+                        arg = _compile(body, variables, atoms, structs)
+                        if should_add(body) and arg not in variables:
+                            atoms.append(arg)
+                            structs.append(body)
+                        expr.append(arg)
+                        not_arg = True
+                    else:
+                        # variable
+                        expr.append(_compile(j, variables, atoms, structs))
 
-    result = _compile(s, variables, atoms, structs)
-    if should_add(s):
-        atoms.append(result)
-        structs.append(s)
-    # remove variables from atomic sentences
-    atoms = list(filter(lambda atom: atom not in variables, atoms))
-    return (result, sorted(variables), atoms, structs)
+            expr = ''.join(expr)
+            if should_add(s) and expr not in variables:
+                atoms.append(expr)
+                structs.append(s)
+            if outermost:
+                return expr
+            return f"({expr})"
+
+        # NOTE: should NEVER get here
+        raise SyntaxError(UNEXPECTED_ERROR)
+
+    _s = flatten(s)
+    source = _compile(_s, variables, atoms, structs, outermost=True)
+    if should_add(_s) and source not in variables:
+        atoms.append(source)
+        structs.append(_s)
+    return (_s, source, sorted(variables), atoms, structs)
 
 
-# naive function that output a table via either stdout or csv
+# validate new filename
+def preprocess_filename(filepath: str) -> str:
+    filepath = filepath.strip()
+
+    if path.isdir(filepath):
+        filepath = path.join(filepath, 'output.csv')
+
+    # add extension if no extension is provided
+    if not filepath.endswith('.csv'):
+        filepath += '.csv'
+
+    # convert to absolute path, resolving ./../~/symlinks
+    # also expanding environment variable e.g. $HOME
+    filepath = path.realpath(path.expanduser(path.expandvars(filepath)))
+
+    # change file name if file path exists
+    counter = 1
+    while path.exists(filepath):
+        filepath = f"{filepath[:-4]}-{counter}.csv"
+        counter += 1
+    
+    return filepath
+
+
+# output a table via either stdout or csv
 
 
 def output_table(data: Dict[str, list],
                  labels: list[str] | None = None,
-                 filename: str | None = None):
+                 filepath: str | None = None):
     headers = list(data.keys())
     # ASSERT: same number of rows in data
     row_no = len(data[headers[0]])
 
-    if filename:
+    if filepath:
         # write to csv file
-        with open(filename, 'w') as csv_file:
+        filepath = preprocess_filename(filepath)
+
+        with open(filepath, 'w') as csv_file:
             writer = csv.writer(csv_file)
             # write header without check/cross column
             headers = list(filter(lambda h: h != MARK_COLUMN, headers))
@@ -469,13 +538,7 @@ def output_table(data: Dict[str, list],
             values = [data[col][row] for col in headers]
             if labels:
                 # use custom labels
-                true, false = labels
-
-                # substitution handler
-                def substitute(value: str) -> str:
-                    return true if value == 1 else (false if value == 0 else value)
-
-                values = list(map(substitute, values))
+                values = [labels[v] if isinstance(v, int) else v for v in values]
             rows.append(row_template.format(*values))
 
         # print table

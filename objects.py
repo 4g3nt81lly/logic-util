@@ -6,43 +6,90 @@ from constants import *
 from helpers import *
 
 
+class Token:
+    # parsed structure
+    struct: list
+    # source binary
+    binary: str
+    # all variables
+    variables: list | None
+    # constituent sentences
+    constituents: list | None
+    # parsed structures of constituents
+    constituent_structs: list | None
+
+    def display_text(self) -> str:
+        return render(self.struct)
+    
+    def __eq__(self, other) -> bool:
+        if isinstance(other, Token):
+            return self.binary == other.binary
+        elif isinstance(other, str):
+            return self.binary == other
+        return False
+    
+    def __str__(self) -> str:
+        return self.binary
+
+    def __hash__(self):
+        return hash(str(self))
+
+    def __init__(self, struct: list, binary: str,
+                 variables: list[str] | None = None,
+                 constituents: list | None = None,
+                 constituent_structs: list | None = None):
+        self.struct = struct
+        self.binary = binary
+        self.variables = variables
+        self.constituents = constituents
+        self.constituent_structs = constituent_structs
+
+
 class Proposition:
     # original statement (input)
     statement: str
-    # parsed structure (nested list)
-    structs: list
-    # compiled statement (executable expression)
-    source: str
-    # all variables
-    variables: list
+    # compiled
+    source: Token
     # all cases
     cases: list
-    # constituent sentences
-    constituents: list
-    # parsed structures of constituents
-    constituent_structs: list
-    # truth table
-    truth_table: Dict[str, list] = {}
+    # truth table (ordered)
+    truth_table: Dict[str | Token, list]
 
     # custom labels for TF
     labels: list[str] | None = None
     # reverse truth values?
     reverse_values: bool
 
+    # display style statement
+    def display(self) -> str:
+        return self.source.display_text()
+
     # truth values of the proposition
-    def values(self):
+    def values(self) -> list[int]:
         return self.truth_table[self.source]
 
     # dict: truth values of the proposition
     def row(self) -> Dict[str, list[str]]:
-        return {standardize_notations(self.source, display=True): self.values()}
+        return {render(self.token.struct): self.values()}
+    
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, Proposition):
+            return self.source == other.source
+        elif isinstance(other, str):
+            return self.source == other
+        return False
+    
+    def __repr__(self) -> str:
+        return self.statement
 
     def __init__(self, statement: str,
                  labels: str | None = None,
-                 reverse: bool = False):
+                 reverse: bool = False,
+                 handle_error: bool = True):
+        statement = standardize_notations(f"({statement})")
         self.statement = statement
         self.reverse_values = reverse
-        if labels:
+        if isinstance(labels, (str, list)):
             if len(labels) != 2:
                 print(CUSTOM_LABEL_EXCEED_LENGTH)
                 exit()
@@ -51,71 +98,78 @@ class Proposition:
                 exit()
             self.labels = [char for char in labels]
 
-        # parse and get structure (nested list)
-        try:
+        # parse and get structure (to nested list)
+        
+        if handle_error:
+            try:
+                parsed_struct = parsed(statement)
+            except AssertionError as err:
+                print(err)
+                exit()
+            except SyntaxError as err:
+                print('Expression:', f"'{statement}'")
+                print(UNMATCHED_PARENTHESES)
+                exit()
+            except Exception as err:
+                print('Expression:', f"'{statement}'")
+                print(UNEXPECTED_ERROR, err)
+                exit()
+        else:
+            # NOTE: can raise exceptions
             parsed_struct = parsed(statement)
-        except AssertionError as err:
-            print(err)
-            exit()
-        except SyntaxError:
-            print('Expression:', f"'{statement}'")
-            print(UNMATCHED_PARENTHESES)
-            exit()
-        except Exception as err:
-            print('Expression:', f"'{statement}'")
-            print(UNEXPECTED_ERROR, err)
-            exit()
 
         if parsed_struct == []:
             print(NULL_STATEMENT)
-            exit()
-
-        self.structs = parsed_struct
-
+            raise Exception(NULL_STATEMENT)
+        
         # compile statement
-        src_object = compile(parsed_struct)
-        (source, variables, atomic_sentences, atomic_structs) = src_object
-        self.source = source
-        self.variables = variables
-        self.constituents = atomic_sentences
-        self.constituent_structs = atomic_structs
+        token = compile(parsed_struct)
+        token = Token(*token)
+        self.source = token
 
         # make all cases
         # default order: F (top) -> T (bottom)
-        cases = list(product([0, 1], repeat=len(variables)))
+        cases = list(product([0, 1], repeat=len(token.variables)))
         if reverse:
             cases = cases[::-1]
         self.cases = cases
         # make table with variable columns
-        self.truth_table = OrderedDict({var: [] for var in variables})
-        for index, var in enumerate(variables):
+
+        self.truth_table = OrderedDict()
+
+        for index, var in enumerate(token.variables):
             for case in cases:
-                self.truth_table[var].append(case[index])
-        # fill in atomic sentences columns
-        self.truth_table.update({s: [] for s in atomic_sentences})
+                value = case[index]
+                if var in self.truth_table.keys():
+                    # key already exists, add to table
+                    self.truth_table[var].append(value)
+                else:
+                    # add new key to table
+                    self.truth_table[var] = [value]
         # for each atomic sentences
-        for sentence in atomic_sentences:
+        for sentence, struct in zip(token.constituents, token.constituent_structs):
             # for each case (row)
             for case in cases:
                 namespace = {var: case[index]
-                             for index, var in enumerate(variables)}
+                             for index, var in enumerate(token.variables)}
                 # evaluate result using eval
                 result = eval(sentence, {}, namespace)
-                # add to table
-                self.truth_table[sentence].append(result)
+                # token object
+                t = Token(struct, sentence)
+                if t in self.truth_table.keys():
+                    # key already exists, add to table
+                    self.truth_table[t].append(result)
+                else:
+                    # add new key to table
+                    self.truth_table[t] = [result]
 
     # an negated instance of the proposition
     def negated(self):
         return Proposition(f'~({self.statement})',
-                           reverse=self.reverse_values)
+                           reverse=self.reverse_values, labels=self.labels)
 
     # whether the proposition is a tautology
-    def is_tautology(self, column: str | int | None = None) -> bool:
-        if column:
-            if isinstance(column, str):
-                return all(self.truth_table[column])
-            elif isinstance(column, int):
-                return all(self.truth_table[self.constituents[column]])
+    def is_tautology(self) -> bool:
         return all(self.values())
 
     # preprocess and output
@@ -126,16 +180,16 @@ class Proposition:
         table_data = OrderedDict()
 
         for col, values in self.truth_table.items():
-            if col in self.variables:
+            if col in self.source.variables:
                 table_data[col] = values
             else:
-                display_sentence = standardize_notations(col, display=True)
+                display_sentence = col.display_text()
                 if no_atoms:
                     # no reference columns, just the statement itself
                     if col == self.source:
                         table_data[display_sentence] = values
                 else:
-                    if col in self.constituents:
+                    if col.binary in self.source.constituents:
                         table_data[display_sentence] = values
 
         if check_handler:
@@ -152,7 +206,7 @@ class Proposition:
                 mark = f" {bold(mark)} "
                 table_data[MARK_COLUMN].append(mark)
 
-        output_table(table_data, labels=self.labels, filename=filename)
+        output_table(table_data, labels=self.labels, filepath=filename)
 
 
 class Argument:
@@ -165,28 +219,24 @@ class Argument:
     # all possible cases
     cases: list
     # truth table
-    truth_table: Dict[str, list]
+    truth_table: Dict[str | Token, list]
 
     # custom labels for TF
     labels: list[str] | None = None
     # reverse truth values?
     reverse_values: bool
 
-    # get all premises (source)
-    def all_premises(self) -> list[str]:
-        return [p.source for p in self.premises]
-
     # get all Proposition objects
     def all_propositions(self) -> list[Proposition]:
         return self.premises + ([self.conclusion] if self.conclusion else [])
 
-    # get all sentences: premises + conclusion (source)
-    def all_sentences(self, variables: bool = False, conclusion: bool = True) -> list[str]:
-        sentences = self.all_premises()
+    # get all sentences: premises + conclusion
+    def all_sentences(self, variables: bool = False, conclusion: bool = True) -> list[str | Proposition]:
+        sentences = self.premises
         if variables:
             sentences = self.variables + sentences
         if conclusion and self.conclusion:
-            sentences.append(self.conclusion.source)
+            sentences.append(self.conclusion)
         return sentences
 
     def __init__(self, premises: list[str] | list[Proposition],
@@ -200,12 +250,11 @@ class Argument:
         else:
             self.premises = [Proposition(premise) for premise in premises]
         if conclusion:
-            # check if conclusion is a Proposition object
             if isinstance(conclusion, Proposition):
                 self.conclusion = conclusion
             else:
                 self.conclusion = Proposition(conclusion)
-        
+
         self.reverse_values = reverse
         if labels:
             if len(labels) != 2:
@@ -217,13 +266,13 @@ class Argument:
             self.labels = [char for char in labels]
 
         # collect all variables
-        variables = self.premises[0].variables[:]  # make a copy
-        # loop through all Proposition objects
-        # and NOT the compiled strings
+        variables = []
+        # loop through all Proposition objects to get vars
         for sentence in self.all_propositions():
-            for variable in sentence.variables:
+            for variable in sentence.source.variables:
                 if variable not in variables:
                     variables.append(variable)
+        variables = sorted(variables)
         self.variables = variables
 
         # make all cases
@@ -232,26 +281,42 @@ class Argument:
         if reverse:
             cases = cases[::-1]
         self.cases = cases
+
         # make table with variable columns
-        self.truth_table = OrderedDict({var: [] for var in variables})
+        self.truth_table = OrderedDict()
+
         for index, var in enumerate(variables):
             for case in cases:
-                self.truth_table[var].append(case[index])
+                value = case[index]
+                if var in self.truth_table.keys():
+                    # key already exists, add variable to table
+                    self.truth_table[var].append(value)
+                else:
+                    # add new key to table
+                    self.truth_table[var] = [value]
 
-        # get all sentences
-        sentences = self.all_sentences()
-        # fill in sentences columns
-        self.truth_table.update({s: [] for s in sentences})
+        # get all propositions
+        sentences = self.all_propositions()
         # for each sentence
         for sentence in sentences:
             # for each case (row)
-            for case in cases:
-                namespace = {var: case[index]
-                             for index, var in enumerate(variables)}
-                # evaluate result using eval
-                result = eval(sentence, {}, namespace)
-                # add to table
-                self.truth_table[sentence].append(result)
+            s = sentence
+            if isinstance(s, Proposition):
+                s = s.source
+            if s not in self.truth_table.keys():
+                # add ONLY IF it's not already added to the truth table
+                for case in cases:
+                    namespace = {var: case[index]
+                                for index, var in enumerate(variables)}
+                    # evaluate result using eval
+                    result = eval(sentence.source.binary, {}, namespace)
+                    if sentence.source in self.truth_table.keys():
+                        # key already exists, add variable to table
+                        self.truth_table[sentence.source].append(result)
+                    else:
+                        # add new key to table
+                        self.truth_table[sentence.source] = [result]
+
 
     # preprocess and output
     def output(self, check_handler: Callable[[list[str]], bool] | None = None,
@@ -261,10 +326,12 @@ class Argument:
 
         table_data = OrderedDict()
 
-        for col, values in self.truth_table.items():
-            if col in sentences:
-                display_sentence = standardize_notations(col, display=True)
-                table_data[display_sentence] = values
+        for sentence in sentences:
+            if isinstance(sentence, str):
+                table_data[sentence] = self.truth_table[sentence]
+            else:
+                display_sentence = sentence.source.display_text()
+                table_data[display_sentence] = self.truth_table[sentence.source]
 
         if check_handler:
             # go through each row and add a column of check/cross mark
@@ -283,29 +350,42 @@ class Argument:
                 mark = f" {bold(mark)} "
                 table_data[MARK_COLUMN].append(mark)
 
-        output_table(table_data, labels=self.labels, filename=filename)
+        output_table(table_data, labels=self.labels, filepath=filename)
 
     # whether the argument is valid
 
-    def is_valid(self) -> bool:
-        sentences = self.all_sentences(variables=True)
-        premises = self.all_premises()
-        # for each premise
+    def is_valid(self, print_countermodel: bool = False) -> bool:
+        propositions = self.all_sentences(variables=True)
         for row in range(len(self.cases)):
             consistent = True
-            for sentence in sentences:
+            for p in propositions:
                 # if it is a premise
-                if sentence in premises:
+                if consistent and p in self.premises:
                     # if any premise is false, skip the rest
-                    if not self.truth_table[sentence][row]:
+                    p = p.source if isinstance(p, Proposition) else p
+                    
+                    if not self.truth_table[p][row]:
                         consistent = False
                         # break  # actually, don't skip just yet
-                        # have to keep going until we find the conclusion
-                if sentence == self.conclusion.source:
-                    conclusion = self.truth_table[sentence][row]
+                        # have to keep going until we get the conclusion
+                
+                if p == self.conclusion:
+                    p = p.source if isinstance(p, Proposition) else p
+                    conclusion = self.truth_table[p][row]
+
             # look at conclusion only if the premises are consistent
             if consistent and not conclusion:
-                # a counterexample is found when conclusion is false
+                if print_countermodel:
+                    # a counterexample is found when conclusion is false
+                    countermodel = []
+                    for variable, value in zip(self.variables, self.cases[row]):
+                        if self.labels:
+                            # custom labels
+                            value = self.labels[value]
+                        countermodel.append(f"{variable} = {value}")
+                    countermodel = ', '.join(countermodel)
+                    print(bold(yellow("Countermodel:", countermodel)))
+
                 return False
 
         return True
@@ -332,10 +412,9 @@ class Argument:
 
         # test all cases using biconditional
         for index, propositions in enumerate(tests):
-            display_expr = [standardize_notations(p.source, display=True)
-                            for p in propositions]
+            display_expr = [p.source.display_text() for p in propositions]
             # join with equivalence sign
-            display_expr = ' \u2261 '.join(display_expr)
+            display_expr = EQUIV_SYMBOL.join(display_expr)
 
             if verbose:
                 # display test cases
@@ -343,13 +422,14 @@ class Argument:
                 print(prefix, display_expr)
 
             # test if the two are of the same form
-            structs = list(map(lambda p: p.structs, propositions))
-            if equivalent_form(*structs):
-                # no need to use the biconditional
-                results[display_expr] = f" {bold(green(CHECK_MARK))} "
-                pass_count += 1
-                print()
-                continue
+            # NOTE: no longer needed, assumption: no commutative/associative-equivalent statement
+            # structs = list(map(lambda p: p.source.struct, propositions))
+            # if equivalent_form(*structs):
+            #     # no need to use the biconditional
+            #     results[display_expr] = f" {bold(green(CHECK_MARK))} "
+            #     pass_count += 1
+            #     print()
+            #     continue
 
             if verbose:
                 # load test case into an argument object
@@ -362,11 +442,10 @@ class Argument:
                 print()
 
             # test equivalence using biconditional
-            sources = list(map(lambda p: p.source, propositions))
-            statement = ' iff '.join(sources)
+            statement = list(map(lambda p: p.statement, propositions))
+            statement = ' iff '.join(statement)
 
-            statement = Proposition(statement,
-                                    labels=self.labels)
+            statement = Proposition(statement)
 
             # add test results regardless
             if statement.is_tautology():
@@ -418,18 +497,18 @@ class Argument:
         # this would correspond to the row values
         headers = list(self.truth_table.keys())
         # get all sentences (of concern)
-        sentences = self.all_sentences()
+        propositions = self.all_propositions()
         sentence_values = []
-        for sentence in sentences:
+        for p in propositions:
             # get index of sentence
-            sentence_index = headers.index(sentence)
+            sentence_index = headers.index(p.source)
             sentence_values.append(values[sentence_index])
         # it would be of length 1 if all same
         return len(set(sentence_values)) == 1
 
     # predicate: check counterexamples (x-mark)
 
-    def X_COUNTEREXAMPLE(self, values: list[str]) -> bool:
+    def X_COUNTERMODEL(self, values: list[str]) -> bool:
         # get the headers from the truth table
         # this would correspond to the row values
         headers = list(self.truth_table.keys())
@@ -438,12 +517,11 @@ class Argument:
         # the conclusion is always the last column
         conclusion_index = headers.index(self.conclusion.source)
         conclusion = values[conclusion_index]
-        # get all premises
-        premises = self.all_premises()
+
         premise_values = []
-        for premise in premises:
+        for premise in self.premises:
             # get index of premise
-            premise_index = headers.index(premise)
+            premise_index = headers.index(premise.source)
             premise_values.append(values[premise_index])
 
         consistent_premises = all(premise_values)

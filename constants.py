@@ -1,13 +1,23 @@
 # internal operators (for compiler)
-OPERATOR_TOKENS = {'and': '&',
-                   'or': '|',
-                   'xor': '^',
-                   'not': '1&~',
-                   '->': '^1|',
-                   'iff': '^1^'}
-OPERATORS = list(OPERATOR_TOKENS.keys())
+BINARY_OPERATORS = {'and': '&',
+                    'or': '|',
+                    'xor': '^',
+                    'not': '1&~',
+                    '->': '^1|',
+                    'iff': '^1^'}
+# display operators
+DISPLAY_OPERATORS = {'and': '\u2227',
+                     'or': '\u2228', 
+                     'xor': '\u22bb',
+                     'not': '\u00ac',
+                     '->': '\u2192',
+                     'iff': '\u2194'}
+OPERATORS = list(BINARY_OPERATORS.keys())
+OPS_BY_PRECEDENCE = ['iff', '->', 'xor', 'or', 'and']
 # logical operators that obey commutativity
 COMMUTATIVE_OPERATORS = ['and', 'or', 'xor', 'iff']
+# logical operators that obey associativity
+ASSOCIATIVE_OPERATORS = COMMUTATIVE_OPERATORS
 XOR_OP = ' xor '
 OR_OP = ' or '
 AND_OP = ' and '
@@ -40,27 +50,20 @@ BOX_RIGHT_T = '\u2528'
 BOX_TOP_T = '\u252f'
 BOX_BOTTOM_T = '\u2537'
 
+EQUIV_SYMBOL = ' \u2261 '
+
 # operator regex patterns
-XOR_PATTERNS = r'[\^\u22bb\u2295\u2a01]+|\b(XOR|xor)\b'
+AND_PATTERNS = r'[&*\u2227\u22c5]+|\b(AND|and)\b'
 
 OR_PATTERNS = r'[|+\u2228]+|\b(OR|or)\b'
 
-AND_PATTERNS = r'[&*\u2227\u22c5]+|\b(AND|and)\b'
+XOR_PATTERNS = r'[\^\u22bb\u2295\u2a01]+|\b(XOR|xor)\b'
 
-NOT_PATTERNS = r'(1&~|\u00ac|~)|\b(NOT|not)\b'
+NOT_PATTERNS = r'\u223c|\u00ac|~|!|\b(NOT|not)\b'
 
-IMPLIES_PATTERNS = r'\^1\||\u27f9|\u27f6|\u2192|\u21d2|->'
+IMPLIES_PATTERNS = r'-+>|\u27f9|\u27f6|\u2192|\u21d2|\bto\b'
 
-IFF_PATTERNS = r'<-+>|\^1\^|\u21d4|\u27f7|\u2194|\u27fa|\b(IFF|iff)\b'
-
-
-# display operators
-XOR_SYMBOL = ' \u22bb '
-OR_SYMBOL = ' \u2228 '
-AND_SYMBOL = ' \u2227 '
-NOT_SYMBOL = '\u00ac'
-IMPLIES_SYMBOL = ' \u2192 '
-IFF_SYMBOL = ' \u2194 '
+IFF_PATTERNS = r'<-+>|\u21d4|\u27f7|\u2194|\u27fa|\b(IFF|iff)\b'
 
 
 # error messages
