@@ -1,4 +1,5 @@
 import argparse
+from sys import exit
 # avoid arrow key values
 # reference: https://stackoverflow.com/a/66539061/10446972
 import readline
@@ -41,14 +42,21 @@ check_equivalence_parser.add_argument('-l', '--labels',
                                       type=str, action='store', default=None,
                                       metavar=('[FALSE][TRUE]'),
                                       help='Custom labels for truth values.')
-check_equivalence_parser.add_argument('-v', '--verbose',
+check_equivalence_parser.add_argument('-m', '--mode',
+                                      type=str.lower, choices=['default',
+                                                               'paired',
+                                                               'tree'],
+                                      action='store', default='default',
+                                      metavar=('MODE'),
+                                      help='Mode for testing logical equivalences.')
+check_equivalence_parser.add_argument('-r', '--reverse-values',
                                       action='store_true', default=False,
-                                      help='Verbose Mode: Show truth table for each equivalency test combination.')
+                                      help='Reverse the order of the truth values in the table.')
 check_equivalence_parser.add_argument('-o', '--output',
                                       type=str, action='store',
                                       metavar=('FILE-PATH'),
                                       help='The file path to be saved. \
-                                        This flag is ignored when verbose mode is on.')
+                                        This flag is ignored when mode is set to paired.')
 
 check_validity_parser = subparsers.add_parser('check-validity',
                                               help='Check if an argument is valid.')
@@ -78,20 +86,23 @@ opts = vars(args)
 
 if 'table_statement' in opts.keys():
     # make truth table
-    def make_table(statement: str, handle_error: bool = True):
-        statement = Proposition(statement,
-                                labels=args.labels,
-                                reverse=args.reverse_values,
-                                handle_error=handle_error)
+    def make_table(statement: str):
+        config = Config(reverse=args.reverse_values,
+                        labels=args.labels,
+                        atoms=(not args.no_atoms))
+        statement = Proposition(statement, config=config)
 
         # get output file name
         filename = args.output.strip() if args.output else None
-        statement.output(filename=filename, no_atoms=args.no_atoms)
+        statement.output_truth_table(filepath=filename)
 
     if args.table_statement:
         statement = args.table_statement.strip()
         if statement != '':
-            make_table(statement)
+            try:
+                make_table(statement)
+            except Exception as err:
+                print(err)
             exit()
 
     while True:
@@ -104,27 +115,26 @@ if 'table_statement' in opts.keys():
             exit()
 
         try:
-            make_table(statement, handle_error=False)
+            make_table(statement)
         except Exception as err:
             print(err)
             continue
 
 elif 'equivalent_statements' in opts.keys():
     # check equivalence
-    def check_equivalence(statements: list[Proposition] | list[str]):
+    def check_equivalence(statements: List[Proposition] | List[str]):
+        config = Config(reverse=args.reverse_values,
+                        labels=args.labels)
         # parse and compile all statements
-        statements = Argument(statements,
-                              labels=args.labels)
+        statements: Argument = Argument(statements, config=config)
 
         # get output file name
         filename = args.output.strip() if args.output else None
 
-        if not args.verbose:
-            # normal: print a combined table with checkmarks
-            statements.output(check_handler=statements.CHECK_EQUIVALENT,
-                              filename=filename)
+        if args.mode == 'default':
+            statements.output_truth_table(annotate='equivalence', filepath=filename)
 
-        equivalent = statements.all_equivalent(verbose=args.verbose)
+        equivalent = statements.test_equivalence(mode=args.mode)
 
         print(end=('' if filename else '\n'))
 
@@ -133,13 +143,13 @@ elif 'equivalent_statements' in opts.keys():
             # equivalent
             print(
                 bold(green(CHECK_MARK,
-                           'The statements are logically equivalent!'))
+                           'The sentences are logically equivalent!'))
             )
         else:
             # not equivalent
             print(
                 bold(red(CROSS_MARK,
-                         'The statements are not logically equivalent!'))
+                         'The sentences are not logically equivalent!'))
             )
         
         print()
@@ -148,49 +158,49 @@ elif 'equivalent_statements' in opts.keys():
         # strip all statements
         statements = [s.strip() for s in args.equivalent_statements]
         # filter empty statements
-        statements = list(filter(lambda s: s != '', statements))
+        statements = [s for s in statements if s != '']
 
         if len(statements) < 2:
-            print('At least 2 statements are required.')
+            print('At least 2 sentences are required.')
             exit()
 
         # create proposition objects
-        statements = [Proposition(s) for s in statements]
+        statements: List[Proposition] = [Proposition(s) for s in statements]
 
         # display statements
         print()
         for index, statement in enumerate(statements):
-            print(f"{index + 1}.", statement.display())
+            print(f"{index + 1}.", display(statement))
         print()
 
         # filter statements with equivalent forms
-        equivalent_statements = OrderedDict()
-        for i, p1 in enumerate(statements):
+        equivalent_statements: List[Tuple[int, Proposition,
+                                          List[Tuple[int, Proposition]]]] = []
+        for i, s1 in enumerate(statements[:-1]):
             # skip the ones pending removal
-            if not p1:
+            if not s1:
                 continue
-            # check rest of the list
-            for j, p2 in enumerate(statements[i + 1:]):
-                if equivalent_form(p1.source.struct, p2.source.struct):
-                    # remove the later (p2, keeping the p1)
-                    # NOTE: to preserve normal indexing, don't remove right away
+            # equivalent pairs
+            equivalents: List[Proposition] = []
+            for j, s2 in enumerate(statements[i + 1:]):
+                if s1 == s2:
+                    # get index to s2
                     index = i + j + 1
+                    equivalents.append((index + 1, s2))
+                    # mark the later for removal
                     statements[index] = None
-                    # keep track of the these statements
-                    key, val = p1.display(), p2.display()
-                    if key not in equivalent_statements.keys():
-                        equivalent_statements[key] = []
-                    equivalent_statements[key].append((index, val))
-        # remove the None values
-        statements = list(filter(lambda s: s is not None, statements))
+            # add to list only if there are equivalents
+            if len(equivalents) > 0:
+                equivalent_statements.append((i + 1, s1, equivalents))
+        statements = [s for s in statements if s is not None]
 
         if len(equivalent_statements) > 0:
             print('The following are commutative/associative-equivalent:')
-            for i, (p1, p2s) in enumerate(equivalent_statements.items()):
+            for (i, p1, p2s) in equivalent_statements:
                 for (j, p2) in p2s:
-                    print(f"({i + 1})",
-                          p1 + EQUIV_SYMBOL + f"({j + 1})",
-                          p2)
+                    print(f"({i})",
+                          display(p1) + EQUIV_SYMBOL + f"({j})",
+                          display(p2))
             print()
             # check the other statements
             if len(statements) > 1:
@@ -202,7 +212,7 @@ elif 'equivalent_statements' in opts.keys():
 
     # interactive mode
     while True:
-        statements: list[Proposition] = []
+        statements: List[Proposition] = []
         while True:
             try:
                 statement = input(f"({len(statements) + 1}) ").strip()
@@ -213,48 +223,48 @@ elif 'equivalent_statements' in opts.keys():
                 break
 
             try:
-                statement = Proposition(statement,
-                                        handle_error=False)
+                statement = Proposition(statement)
             except Exception as err:
                 print(err)
                 continue
 
-            # get commutative/associative-equivalent statements
+            # get prior commutative/associative-equivalent statements
             equivalences = []
             for s in statements:
-                if equivalent_form(statement.source.struct, s.source.struct):
-                    equivalences.append(s.display())
+                if statement == s:
+                    equivalences.append(s)
             if len(equivalences) > 0:
-                print('The statement is commutative/associative-equivalent to:')
-                statement = statement.display()
+                print('The sentence is commutative/associative-equivalent to:')
                 for s in equivalences:
-                    print('>', s)
+                    print('>', display(s))
             else:
+                print(display(statement))
                 statements.append(statement)
 
         if statements == []:
             exit()
         elif len(statements) == 1:
-            print('At least 2 statements are required.')
+            print('At least 2 sentences are required.')
         else:
             print()
             check_equivalence(statements)
 
 elif 'arg_premises' in opts.keys():
     # check validity
-    def check_validity(premises, conclusion):
+    def check_validity(premises: List[Proposition],
+                       conclusion: Proposition):
+        config = Config(reverse=args.reverse_values,
+                        labels=args.labels,
+                        log_countermodel=True)
         # parse and compile all statements
-        argument = Argument(premises, conclusion=conclusion,
-                            labels=args.labels,
-                            reverse=args.reverse_values)
+        argument = Argument(premises, conclusion, config=config)
 
         # get output file name
         filename = args.output.strip() if args.output else None
+        
+        argument.output_truth_table(annotate='validity', filepath=filename)
 
-        argument.output(check_handler=argument.X_COUNTERMODEL,
-                        filename=filename)
-
-        valid = argument.is_valid(print_countermodel=True)
+        valid = argument.is_valid()
 
         print(end=('' if filename else '\n'))
 
@@ -267,12 +277,27 @@ elif 'arg_premises' in opts.keys():
             print(bold(red(CROSS_MARK, 'The argument is invalid!')))
 
         print()
+    
+    def display_argument(premises: List[Proposition],
+                         conclusion: Proposition):
+        # display argument, confirm
+        print()
+        max_length = 0
+        for index, premise in enumerate(premises):
+            display_text_length = len(str(premise))
+            # update max length
+            if display_text_length > max_length:
+                max_length = display_text_length
+            print(f"{index + 1}.", display(premise))
+        # separate w/ max length of display premises + 5
+        separator(max_length + 5)
+        print(u'\u2234', display(conclusion), end='\n\n')
 
     if args.arg_premises:
         # strip all premises
         premises = [p.strip() for p in args.arg_premises]
         # filter empty premises
-        premises = list(filter(lambda p: p != '', premises))
+        premises = [p for p in premises if p != '']
 
         # take last premise as conclusion if none provided
         conclusion = premises[-1]
@@ -280,32 +305,20 @@ elif 'arg_premises' in opts.keys():
             # conclusion is given
             conclusion = args.conclusion.strip()
         else:
-            conclusion = premises[-1]
             # exclude the last premise since it was used as conclusion
             premises = premises[:-1]
 
         premises = [Proposition(p) for p in premises]
         conclusion = Proposition(conclusion)
 
-        # display argument, confirm
-        print()
-        max_length = 0
-        for index, premise in enumerate(premises):
-            display = premise.display()
-            # update max length
-            if len(display) > max_length:
-                max_length = len(display)
-            print(f"{index + 1}.", premise.display())
-        # separate w/ max length of display premises + 5
-        separator(max_length + 5)
-        print('\u2234', conclusion.display(), end='\n\n')
+        display_argument(premises, conclusion)
 
         check_validity(premises, conclusion)
         exit()
 
     # interactive mode
     while True:
-        premises: list[Proposition] = []
+        premises: List[Proposition] = []
         while True:
             try:
                 premise = input(f"Premise {len(premises) + 1}: ").strip()
@@ -316,12 +329,12 @@ elif 'arg_premises' in opts.keys():
                 break
 
             try:
-                premise = Proposition(premise,
-                                      handle_error=False)
+                premise = Proposition(premise)
             except Exception as err:
                 print(err)
                 continue
 
+            print(display(premise))
             premises.append(premise)
 
         if premises == []:
@@ -346,26 +359,16 @@ elif 'arg_premises' in opts.keys():
                     continue
             else:
                 try:
-                    conclusion = Proposition(conclusion,
-                                             handle_error=False)
+                    conclusion = Proposition(conclusion)
                 except Exception as err:
                     print(err)
                     continue
 
+                print(display(conclusion))
                 break
 
-        # display argument, confirm
-        print()
-        max_length = 0
-        for index, premise in enumerate(premises):
-            display = premise.display()
-            # update max length
-            if len(display) > max_length:
-                max_length = len(display)
-            print(f"{index + 1}.", premise.display())
-        # separate w/ max length of display premises + 5
-        separator(max_length + 5)
-        print('\u2234', conclusion.display(), end='\n\n')
+        display_argument(premises, conclusion)
+
         if confirm('Check? (Y/n)'):
             print()
             check_validity(premises, conclusion)

@@ -1,21 +1,6 @@
-# internal operators (for compiler)
-BINARY_OPERATORS = {'and': '&',
-                    'or': '|',
-                    'xor': '^',
-                    'not': '1&~',
-                    '->': '^1|',
-                    'iff': '^1^'}
-# display operators
-DISPLAY_OPERATORS = {'and': '\u2227',
-                     'or': '\u2228', 
-                     'xor': '\u22bb',
-                     'not': '\u00ac',
-                     '->': '\u2192',
-                     'iff': '\u2194'}
-OPERATORS = list(BINARY_OPERATORS.keys())
 OPS_BY_PRECEDENCE = ['iff', '->', 'xor', 'or', 'and']
 # logical operators that obey commutativity
-COMMUTATIVE_OPERATORS = ['and', 'or', 'xor', 'iff']
+COMMUTATIVE_OPERATORS = ['and', 'or', 'xor']
 # logical operators that obey associativity
 ASSOCIATIVE_OPERATORS = COMMUTATIVE_OPERATORS
 XOR_OP = ' xor '
@@ -27,7 +12,7 @@ IFF_OP = ' iff '
 
 
 # check/cross mark
-MARK_COLUMN = 'CHECK/CROSS'
+MARK_COLUMN = ' '
 CHECK_MARK = '\u2713'
 CROSS_MARK = '\u2717'
 
@@ -53,7 +38,7 @@ BOX_BOTTOM_T = '\u2537'
 EQUIV_SYMBOL = ' \u2261 '
 
 # operator regex patterns
-AND_PATTERNS = r'[&*\u2227\u22c5]+|\b(AND|and)\b'
+AND_PATTERNS = r'[&\*\u2227\u22c5]+|\b(AND|and)\b'
 
 OR_PATTERNS = r'[|+\u2228]+|\b(OR|or)\b'
 
@@ -68,10 +53,11 @@ IFF_PATTERNS = r'<-+>|\u21d4|\u27f7|\u2194|\u27fa|\b(IFF|iff)\b'
 
 # error messages
 UNEXPECTED_ERROR = 'An unexpected error occurred:'
-NULL_STATEMENT = 'Error: Null statement.'
-UNMATCHED_PARENTHESES = 'Syntax error: Unmatched parentheses.'
-CUSTOM_LABEL_EXCEED_LENGTH = 'Custom label string must be of length 2.'
-CUSTOM_LABEL_IDENTICAL = 'Custom labels must be different.'
+NULL_SENTENCE = '[Syntax Error] Null sentence.'
+UNMATCHED_PARENTHESES = '[Syntax Error] Unmatched parentheses.'
+MISSING_COMPONENTS = '[Syntax error] Missing an operand/operator in expression '
+CUSTOM_LABEL_LENGTH_ERROR = 'Custom label string must be of length 2.'
+CUSTOM_LABEL_IDENTICAL_ERROR = 'Custom labels must be different.'
 NAME_HELP = '''Rules:
 1. Contains only alpha-numeric characters and underscores.
 2. Must not start with a number.

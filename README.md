@@ -2,15 +2,15 @@
 An easy-to-use utility for propositional logic written in vanilla Python.
 
 ## 🤔&ensp;Why?
-Let's admit it, anyone would find truth tables and equivalency/validity tests tedious, especially when it comes to something like this:
+Let's admit it, anyone would find equivalency/validity tests with truth tables tedious, especially when it comes to something like this:
 
 $(a\lor\neg c)\veebar(\neg b\lor c)\equiv\left(\neg a\land(\neg b\to c))\lor(a\land\neg(b\to c)\right)$
 
 (okay for those of who don't think this is a hard proof, you guys rock)
 
-I grew weary of doing long-winded truth tables just to verify if I had done the proof right, so I decided to write a tool that does the dirty work for me.
+I grew weary of doing long-winded truth tables to verify if I had done a proof right, so I decided to write a tool that does the dirty work for me.
 
-I find this quite handy as I use it occasionally to see if my "logic" is right, and I think it may benefit propositional logic learners out there, so here we are!
+I use it occasionally to check if my "logic" is right, and I think it may benefit many propositional logic learners out there!
 
 **Scenarios:**
 
@@ -23,7 +23,7 @@ I find this quite handy as I use it occasionally to see if my "logic" is right, 
 
 
 ## 🧩&ensp;Features
-1. Draw and/or export a truth table **w/wo atomic sentences**.
+1. Draw and/or export a truth table **w/wo constituent sentences**.
 2. Logical equivalency test for multiple propositional statements.
 3. Validity test for logical arguments.
 4. Light-weighted and no dependencies needed.
@@ -35,7 +35,7 @@ I find this quite handy as I use it occasionally to see if my "logic" is right, 
  <summary><h3 style="margin-top: .5em; margin-bottom: .25em;">&ensp;Working with source code</h3><br/>Windows-friendly.</summary>
  
  #### Install Python 3.8+
- Here I'm only showing with Homebrew (but really, you can get it from anywhere, as long as it's legit):
+ Here I'm only showing Homebrew (but really, you can get it from anywhere, as long as it's legit):
  
  ```shell
  brew install python3
@@ -227,7 +227,7 @@ To exit, hit <kbd>Ctrl</kbd> + <kbd>C</kbd>, <kbd>Ctrl</kbd> + <kbd>D</kbd>, or 
    Enter a statement: (a iff b) or c
    Enter a statement: ▊
  ```
-The truth tables will be directly saved to your specified location (they won't be printed in the Terminal), you'll now see `output.csv`, `output-1.csv`, and `output-2.csv` with respective truth tables at `~/Desktop`.
+The truth tables will be saved directly to your specified location (they won't be printed in Terminal), you'll now see `output.csv`, `output-1.csv`, and `output-2.csv` with respective truth tables at `~/Desktop`.
 </details>
 
 ---
@@ -277,9 +277,9 @@ Or even multiple statements:
 
 ✓ The statements are logically equivalent!
 ```
-If you wish to see truth table for each test combination, use the flag `-v` or `--verbose`:
+If you wish to see truth table for each test combination, set the mode using the flag `-m` or `--mode` to `paired`:
 ```shell
-> ./logic-util check-equivalence '~(a or b)' '~a and ~b' '~(a -> b)' -v
+> ./logic-util check-equivalence '~(a or b)' '~a and ~b' '~(a -> b)' -m paired
 
 1. ¬(a ∨ b)
 2. ¬a ∧ ¬b
@@ -341,7 +341,7 @@ Summary: 1/3 tests passed.
 Additional flags `-l`/`--labels`, `-r`/`--reverse`, and `-o`/`--output` also apply.
 
 > **Note**  
-> The flag `-o`/`--output` will be ignored when `-v`/`--verbose` is enabled under interactive mode (no files will be exported).
+> The flag `-o`/`--output` will be ignored when `-m`/`--mode` is set to `paired` under interactive mode (no files will be exported).
 
 #### Interactive Mode
 Similar to `make-table`, `check-equivalence` also has an interactive mode, which can be used to check multiple pairs/groups of statement at a time.
@@ -390,7 +390,7 @@ The `-c`/`--conclusion` flag is _optional_, the last premise will be taken as th
  ┠───┼───┼───────┼───┨
  ┃ 1 │ 1 │   1   │ ✓ ┃
  ┗━━━┷━━━┷━━━━━━━┷━━━┛
- Counterexample: a = 0, b = 1
+ Countermodel: a = 0, b = 1
 
  ✗ The argument is invalid!
  ```
@@ -419,7 +419,7 @@ To exit, hit <kbd>Ctrl</kbd> + <kbd>C</kbd> or <kbd>Ctrl</kbd> + <kbd>D</kbd>.
 - [ ] Validity test using formal proof with rules of inference.
 - [ ] Validity/Equivalency test with the [truth tree method (the semantic tableaux)](https://en.wikipedia.org/wiki/Method_of_analytic_tableaux).
 - [ ] First-order logic statement evaluation and validity/equivalency test (with the truth tree method).
-- [ ] An Windows executable.
+- [ ] A Windows executable.
 - [ ] Suggest features...?
 
 ## 💪&ensp;Contributing

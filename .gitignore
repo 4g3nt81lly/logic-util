@@ -10,5 +10,8 @@
 **/.vscode/**
 .vscode/*
 
+# build files
+build/**
+
 # test file
 test.py
